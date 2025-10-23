@@ -59,7 +59,7 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 EOF
 )"
 
-# === CHART: BAR ===
+# === CHART: BAR (Storage per DB Engine in GB) ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
@@ -109,13 +109,15 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
       },
       \"legend\": {
         \"display\": false
-      },
-      \"datalabels\": {
-        \"anchor\": \"end\",
-        \"align\": \"top\",
-        \"color\": \"#333\",
-        \"font\": { \"weight\": \"bold\" },
-        \"formatter\": \"(val) => val + ' GB'\"
+      }
+    },
+    \"scales\": {
+      \"y\": {
+        \"beginAtZero\": true,
+        \"title\": {
+          \"display\": true,
+          \"text\": \"GB\"
+        }
       }
     }
   }
@@ -262,4 +264,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo "Email sent to yvette.halili@telusinternational.com"
+echo " Email sent to yvette.halili@telusinternational.com"
