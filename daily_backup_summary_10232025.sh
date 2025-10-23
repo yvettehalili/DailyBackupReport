@@ -28,12 +28,12 @@ SELECT ROUND(SUM(CASE size_name
     WHEN 'KB' THEN size/1024/1024
     WHEN 'MB' THEN size/1024
     WHEN 'GB' THEN size
-    ELSE 0 END), 1)
+    ELSE 0 END), 2)
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
 ")
 
-# === CHART URLs ===
+# === CHART: DONUT (Success vs Failure) ===
 DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
   "type": "doughnut",
@@ -59,40 +59,61 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 EOF
 )"
 
-read -r mysql_size pgsql_size mssql_size <<< $(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
-SELECT
-  ROUND(SUM(CASE WHEN DB_engine='MYSQL' THEN CASE size_name WHEN 'GB' THEN size ELSE 0 END ELSE 0 END), 1),
-  ROUND(SUM(CASE WHEN DB_engine='PGSQL' THEN CASE size_name WHEN 'GB' THEN size ELSE 0 END ELSE 0 END), 1),
-  ROUND(SUM(CASE WHEN DB_engine='MSSQL' THEN CASE size_name WHEN 'GB' THEN size ELSE 0 END ELSE 0 END), 1)
+# === CHART: BAR (Storage per DB Engine) ===
+engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
+SELECT DB_engine, ROUND(SUM(CASE size_name
+    WHEN 'B' THEN size/1024/1024/1024
+    WHEN 'KB' THEN size/1024/1024
+    WHEN 'MB' THEN size/1024
+    WHEN 'GB' THEN size
+    ELSE 0 END), 1) AS TotalGB
 FROM daily_backup_report
-WHERE backup_date = '${REPORT_DATE}';
+WHERE backup_date = '${REPORT_DATE}'
+GROUP BY DB_engine;
 ")
 
-STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
+labels=""
+values=""
+colors=""
+while IFS=$'\t' read -r engine total; do
+    labels="${labels}\"${engine}\","
+    values="${values}${total},"
+    case "$engine" in
+        MYSQL) colors="${colors}\"#00B7C3\"," ;;
+        PGSQL) colors="${colors}\"#4B286D\"," ;;
+        MSSQL) colors="${colors}\"#F4F4F4\"," ;;
+        *) colors="${colors}\"#CCCCCC\"," ;;
+    esac
+done <<< "${engine_storage}"
+
+labels="[${labels%,}]"
+values="[${values%,}]"
+colors="[${colors%,}]"
+
+STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
 {
-  "type": "bar",
-  "data": {
-    "labels": ["MySQL", "PostgreSQL", "MSSQL"],
-    "datasets": [{
-      "label": "GB",
-      "data": [${mysql_size}, ${pgsql_size}, ${mssql_size}],
-      "backgroundColor": ["#00B7C3", "#4B286D", "#F4F4F4"]
+  \"type\": \"bar\",
+  \"data\": {
+    \"labels\": ${labels},
+    \"datasets\": [{
+      \"label\": \"GB\",
+      \"data\": ${values},
+      \"backgroundColor\": ${colors}
     }]
   },
-  "options": {
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Daily Storage Utilization (GB)"
+  \"options\": {
+    \"plugins\": {
+      \"title\": {
+        \"display\": true,
+        \"text\": \"Daily Storage Utilization (GB)\"
       },
-      "legend": {
-        "display": false
+      \"legend\": {
+        \"display\": false
       }
     }
   }
 }
-EOF
-)"
+" | jq -sRr @uri)"
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
