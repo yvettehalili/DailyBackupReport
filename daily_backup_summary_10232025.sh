@@ -33,7 +33,7 @@ FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
 ")
 
-# === DONUT CHART ===
+# === CHART: DONUT ===
 DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
   "type": "doughnut",
@@ -59,7 +59,7 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 EOF
 )"
 
-# === BAR CHART: Storage per DB Engine ===
+# === CHART: BAR ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
@@ -109,32 +109,39 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
       },
       \"legend\": {
         \"display\": false
+      },
+      \"datalabels\": {
+        \"anchor\": \"end\",
+        \"align\": \"top\",
+        \"color\": \"#333\",
+        \"font\": { \"weight\": \"bold\" },
+        \"formatter\": \"(val) => val + ' GB'\"
       }
     }
   }
 }
 ")"
 
-# === TOP 5 AGGREGATED BACKUPS (Normalized to MB) ===
+# === TOP 5 AGGREGATED BACKUPS (in GB) ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
   CASE size_name
-    WHEN 'B' THEN size / 1024 / 1024
-    WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
+    WHEN 'B' THEN size / 1024 / 1024 / 1024
+    WHEN 'KB' THEN size / 1024 / 1024
+    WHEN 'MB' THEN size / 1024
+    WHEN 'GB' THEN size
     ELSE 0
   END
-), 2), ' MB') AS TotalSize
+), 2), ' GB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
 ORDER BY SUM(
   CASE size_name
-    WHEN 'B' THEN size / 1024 / 1024
-    WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
+    WHEN 'B' THEN size / 1024 / 1024 / 1024
+    WHEN 'KB' THEN size / 1024 / 1024
+    WHEN 'MB' THEN size / 1024
+    WHEN 'GB' THEN size
     ELSE 0
   END
 ) DESC
@@ -144,22 +151,95 @@ LIMIT 5;
 # === EMAIL HTML ===
 {
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; }
-.container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 10px; }
-h1, h2 { color: #4B286D; text-align: center; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-tr:nth-child(even) { background-color: #f9f9f9; }
+body {
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f4f4f4;
+  color: #333;
+  padding: 20px;
+}
+.container {
+  max-width: 800px;
+  margin: auto;
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 0 12px rgba(75, 40, 109, 0.15);
+  border: 1px solid #e0d6f0;
+}
+h1 {
+  color: #4B286D;
+  text-align: center;
+  font-size: 26px;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #4B286D;
+  padding-bottom: 5px;
+}
+h2 {
+  color: #4B286D;
+  font-size: 20px;
+  margin-top: 30px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 5px;
+}
+.summary-box {
+  background-color: #f7f3fb;
+  border-left: 6px solid #4B286D;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 25px;
+  font-size: 16px;
+  box-shadow: inset 0 0 5px rgba(75, 40, 109, 0.05);
+}
+.chart-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.chart-row img {
+  width: 100%;
+  max-width: 360px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.05);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  border: 1px solid #e0d6f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+th {
+  background-color: #4B286D;
+  color: white;
+  padding: 10px;
+  text-align: left;
+  border-bottom: 2px solid #ddd;
+}
+td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+.footer {
+  text-align: center;
+  margin-top: 40px;
+  color: #4B286D;
+  font-size: 14px;
+  border-top: 1px solid #ccc;
+  padding-top: 10px;
+}
 </style></head><body><div class='container'>"
 
 echo "<h1>Daily Backup Report - ${REPORT_DATE}</h1>"
-echo "<div style='padding: 15px; background-color: #f7f3fb; border-left: 5px solid #4B286D; margin-bottom: 20px;'>"
-echo "<p><strong>Executive Summary:</strong><br>"
-echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</span> | Total Failures: ${error_count} | Total Storage: ${total_storage} GB</p>"
-echo "</div>"
+echo "<div class='summary-box'><strong>Executive Summary:</strong><br>"
+echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</span> | Total Failures: ${error_count} | Total Storage: ${total_storage} GB</div>"
 
-echo "<table><tr><td style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%;'></td>"
-echo "<td style='width: 50%; text-align: center;'><img src='${STACKED_CHART_URL}' style='max-width: 100%;'></td></tr></table>"
+echo "<div class='chart-row'><img src='${DONUT_CHART_URL}'><img src='${STACKED_CHART_URL}'></div>"
 
 echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
@@ -167,7 +247,7 @@ echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size;
 done
 echo "</table>"
 
-echo "<div style='text-align: center; margin-top: 30px; color: #4B286D;'>Report generated by Database Engineering</div>"
+echo "<div class='footer'>Report generated by Database Engineering</div>"
 echo "</div></body></html>"
 } > "${emailFile}"
 
