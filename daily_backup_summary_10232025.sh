@@ -33,7 +33,7 @@ FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
 ")
 
-# === CHART: DONUT (Success vs Failure) ===
+# === DONUT CHART ===
 DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
   "type": "doughnut",
@@ -59,7 +59,7 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 EOF
 )"
 
-# === CHART: BAR (Storage per DB Engine) ===
+# === BAR CHART: Storage per DB Engine ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
@@ -113,15 +113,31 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
     }
   }
 }
-" | jq -sRr @uri)"
+")"
 
-# === TOP 5 AGGREGATED BACKUPS ===
+# === TOP 5 AGGREGATED BACKUPS (Normalized to MB) ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
-SELECT Server, DB_engine, CONCAT(ROUND(SUM(size), 2), ' MB') AS TotalSize
+SELECT Server, DB_engine, CONCAT(ROUND(SUM(
+  CASE size_name
+    WHEN 'B' THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
+), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
-ORDER BY SUM(size) DESC
+ORDER BY SUM(
+  CASE size_name
+    WHEN 'B' THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
+) DESC
 LIMIT 5;
 ")
 
