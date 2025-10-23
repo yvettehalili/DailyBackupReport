@@ -20,6 +20,8 @@ WHERE backup_date = '${REPORT_DATE}';
 
 success_count=$((total_count - error_count))
 success_rate=$(awk "BEGIN {printf \"%.1f\", (${success_count}/${total_count})*100}")
+error_rate=$(awk "BEGIN {printf \"%.1f\", (${error_count}/${total_count})*100}")
+
 total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
@@ -36,7 +38,7 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
   "type": "doughnut",
   "data": {
-    "labels": ["Success", "Failure"],
+    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#4B286D", "#00B7C3"]
@@ -72,7 +74,7 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
   "data": {
     "labels": ["MySQL", "PostgreSQL", "MSSQL"],
     "datasets": [{
-      "label": "GB Size",
+      "label": "GB",
       "data": [${mysql_size}, ${pgsql_size}, ${mssql_size}],
       "backgroundColor": ["#00B7C3", "#4B286D", "#F4F4F4"]
     }]
@@ -81,27 +83,24 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
     "plugins": {
       "title": {
         "display": true,
-        "text": "Daily Storage Utilization per Type"
+        "text": "Daily Storage Utilization (GB)"
       },
       "legend": {
         "display": false
       }
-    },
-    "scales": {
-      "x": { "stacked": true },
-      "y": { "stacked": true }
     }
   }
 }
 EOF
 )"
 
-# === TOP 5 BACKUPS TABLE ===
+# === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
-SELECT Server, DB_engine, CONCAT(size, ' ', size_name) AS Size
+SELECT Server, DB_engine, CONCAT(ROUND(SUM(size), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
-ORDER BY size DESC
+GROUP BY Server, DB_engine
+ORDER BY SUM(size) DESC
 LIMIT 5;
 ")
 
@@ -118,7 +117,8 @@ tr:nth-child(even) { background-color: #f9f9f9; }
 
 echo "<h1>Daily Backup Report - ${REPORT_DATE}</h1>"
 echo "<div style='padding: 15px; background-color: #f7f3fb; border-left: 5px solid #4B286D; margin-bottom: 20px;'>"
-echo "<p><strong>Status:</strong> <span style='color: #008000;'>HIGH SUCCESS</span> | <strong>Backups Successful:</strong> ${success_rate}% | <strong>Total Failures:</strong> ${error_count} | <strong>Total Storage:</strong> ${total_storage} GB</p>"
+echo "<p><strong>Executive Summary:</strong><br>"
+echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</span> | Total Failures: ${error_count} | Total Storage: ${total_storage} GB</p>"
 echo "</div>"
 
 echo "<table><tr><td style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%;'></td>"
