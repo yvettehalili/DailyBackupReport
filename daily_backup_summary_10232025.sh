@@ -106,8 +106,7 @@ STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
         \"color\": \"white\",
         \"anchor\": \"center\",
         \"align\": \"center\",
-        \"font\": { \"weight\": \"bold\", \"size\": 14 },
-        \"formatter\": \"(val) => val + ' GB'\"
+        \"font\": { \"weight\": \"bold\", \"size\": 14 }
       }
     },
     \"scales\": {
