@@ -142,7 +142,7 @@ BAR_CHART_JSON=$(cat <<EOF
         "display": true,
         "text": "Total Backup Sizes by Database Type",
         "color": "#4B286D",
-        "font": { "size": 20, "weight": "bold" }
+        "font": { "size": 18, "weight": "bold" }
       },
       "legend": { "display": false },
       "datalabels": {
@@ -220,10 +220,14 @@ cat <<EOF > "${emailFile}"
     font-family: 'Segoe UI', Arial, sans-serif;
     color: #333;
     background-color: #fafafa;
-    margin: 0;
     padding: 20px;
   }
-  .header-box {
+  h2 {
+    text-align: center;
+    color: #2b3d52;
+    margin-bottom: 25px;
+  }
+  .summary-box {
     display: flex;
     justify-content: space-around;
     background: #fff;
@@ -246,29 +250,30 @@ cat <<EOF > "${emailFile}"
   .success { color: #2e7d32; }
   .fail { color: #d32f2f; }
   .neutral { color: #1976d2; }
-  h2 {
-    color: #2b3d52;
+  .charts-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 0 auto 40px;
+    max-width: 1000px;
+  }
+  .chart-card {
+    flex: 1;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
     text-align: center;
-    margin-bottom: 30px;
+    padding: 15px;
   }
   .chart-title {
-    font-weight: 600;
-    color: #2b3d52;
-    text-align: center;
-    margin-top: 10px;
+    font-weight: bold;
+    color: #4B286D;
     margin-bottom: 10px;
-    font-size: 16px;
-  }
-  .chart-container {
-    text-align: center;
-    margin-bottom: 40px;
   }
   .total {
-    font-size: 16px;
-    font-weight: bold;
+    font-size: 14px;
     color: #0078d7;
-    text-align: center;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
   }
   table {
     border-collapse: collapse;
@@ -286,30 +291,22 @@ cat <<EOF > "${emailFile}"
   th {
     background-color: #2b3d52;
     color: #fff;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
   tr:nth-child(even) { background-color: #f8f9fa; }
-  tr:hover { background-color: #eef2f7; }
-  td { color: #333; font-size: 13px; }
-  td:first-child { font-weight: 600; color: #0078d7; }
+  td:first-child { font-weight: bold; color: #0078d7; }
   .footer {
-    font-size: 11px;
-    color: #666;
     text-align: center;
+    color: #666;
+    font-size: 11px;
     margin-top: 30px;
   }
 </style>
 </head>
 <body>
-  <h2>📦 Daily Backup Summary Report - ${REPORT_DATE}</h2>
 
-  <div class="header-box">
-    <div class="metric">
-      <div class="metric-value neutral">${total_count}</div>
-      <div class="metric-label">Total Backups</div>
-    </div>
+  <h2>📦 Backup Summary - ${REPORT_DATE}</h2>
+
+  <div class="summary-box">
     <div class="metric">
       <div class="metric-value neutral">${TOTAL_SIZE_GB} GB</div>
       <div class="metric-label">Total Storage</div>
@@ -324,15 +321,16 @@ cat <<EOF > "${emailFile}"
     </div>
   </div>
 
-  <div class="chart-container">
-    <div class="chart-title">Backup Status Overview</div>
-    <img src="${DONUT_CHART_URL}" width="400" height="400">
-  </div>
-
-  <div class="chart-container">
-    <div class="chart-title">Total Backup Sizes by Database Type</div>
-    <div class="total">Total Backup Size: ${TOTAL_SIZE_GB} GB</div>
-    <img src="${BAR_CHART_URL}" width="600" height="350">
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Backup Status Overview</div>
+      <img src="${DONUT_CHART_URL}" width="350" height="350">
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Total Backup Sizes by Database Type</div>
+      <div class="total">Total Backup Size: ${TOTAL_SIZE_GB} GB</div>
+      <img src="${BAR_CHART_URL}" width="500" height="350">
+    </div>
   </div>
 
   <h3 style="text-align:center; color:#2b3d52;">Top 5 Largest Backups</h3>
@@ -356,4 +354,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo " Email sent successfully to yvette.halili@telusinternational.com"
+echo "Email sent successfully to yvette.halili@telusinternational.com"
