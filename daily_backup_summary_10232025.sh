@@ -17,16 +17,17 @@ WHERE backup_date = '${REPORT_DATE}';
 ")
 
 success_count=$((total_count - error_count))
-success_rate=$(awk "BEGIN {printf \"%.1f\", (${success_count}/${total_count})*100}")
-error_rate=$(awk "BEGIN {printf \"%.1f\", (${error_count}/${total_count})*100}")
+# Added conditional check for division by zero
+success_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${success_count}/${total_count})*100}}")
+error_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${error_count}/${total_count})*100}}")
 
 total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
-    WHEN 'KB' THEN size/1024/1024
-    WHEN 'MB' THEN size/1024
-    WHEN 'GB' THEN size
-    ELSE 0 END), 2)
+    WHEN 'B' THEN size/1024/1024/1024
+    WHEN 'KB' THEN size/1024/1024
+    WHEN 'MB' THEN size/1024
+    WHEN 'GB' THEN size
+    ELSE 0 END), 2)
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
 ")
@@ -34,120 +35,131 @@ WHERE backup_date = '${REPORT_DATE}';
 # === DONUT CHART ===
 DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
-  "type": "doughnut",
-  "data": {
-    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
-    "datasets": [{
-      "data": [${success_count}, ${error_count}],
-      "backgroundColor": ["#4B286D", "#00B7C3"]
-    }]
-  },
-  "options": {
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Backup Status Overview"
-      },
-      "legend": {
-        "position": "bottom"
-      }
-    }
-  }
+  "type": "doughnut",
+  "data": {
+    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
+    "datasets": [{
+      "data": [${success_count}, ${error_count}],
+      "backgroundColor": ["#4B286D", "#00B7C3"]
+    }]
+  },
+  "options": {
+    "plugins": {
+      "title": {
+        "display": true,
+        "text": "Backup Status Overview"
+      },
+      "legend": {
+        "position": "bottom"
+      }
+    }
+  }
 }
 EOF
 )"
 
-# === BAR CHART: Storage per DB Engine ===
+# === BAR CHART: Storage per DB Engine (Data Preparation) ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
-    WHEN 'KB' THEN size/1024/1024
-    WHEN 'MB' THEN size/1024
-    WHEN 'GB' THEN size
-    ELSE 0 END), 1) AS TotalGB
+    WHEN 'B' THEN size/1024/1024/1024
+    WHEN 'KB' THEN size/1024/1024
+    WHEN 'MB' THEN size/1024
+    WHEN 'GB' THEN size
+    ELSE 0 END), 1) AS TotalGB
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY DB_engine;
 ")
 
-labels=""
-values=""
-colors=""
+LABELS_JSON="["
+DATA_JSON="["
+COLORS_JSON="["
+
 while IFS=$'\t' read -r engine total; do
-    labels="${labels}\"${engine}\","
-    values="${values}${total},"
-    colors="${colors}\"#78BE20\","
+    LABELS_JSON+=\"$engine\","
+    DATA_JSON+="$total,"
+    
+    # Assign specific colors for branding consistency
+    if [[ "$engine" == "MYSQL" ]]; then COLOR_CODE="#4B286D"
+    elif [[ "$engine" == "PGSQL" ]]; then COLOR_CODE="#00B7C3"
+    elif [[ "$engine" == "MSSQL" ]]; then COLOR_CODE="#78BE20"
+    else COLOR_CODE="#A0A0A0"
+    fi
+    COLORS_JSON+=\"$COLOR_CODE\","
 done <<< "${engine_storage}"
 
-labels="[${labels%,}]"
-values="[${values%,}]"
-colors="[${colors%,}]"
+# Close the JSON arrays
+LABELS_JSON="${LABELS_JSON%,}]"
+DATA_JSON="${DATA_JSON%,}]"
+COLORS_JSON="${COLORS_JSON%,}]"
 
-BAR_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
+# === BAR CHART (Image Generation - Using safer <<EOF structure) ===
+BAR_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 {
-  \"type\": \"bar\",
-  \"data\": {
-    \"labels\": ${labels},
-    \"datasets\": [{
-      \"label\": \"Storage (GB)\",
-      \"data\": ${values},
-      \"backgroundColor\": ${colors},
-      \"barPercentage\": 0.6
-    }]
-  },
-  \"options\": {
-    \"plugins\": {
-      \"title\": {
-        \"display\": true,
-        \"text\": \"Daily Storage Utilization (GB)\",
-        \"font\": { \"size\": 18 }
-      },
-      \"legend\": {
-        \"display\": false
-      },
-      \"datalabels\": {
-        \"display\": true,
-        \"color\": \"white\",
-        \"anchor\": \"end\",
-        \"align\": \"start\",
-        \"font\": { \"weight\": \"bold\", \"size\": 14 }
-      }
-    },
-    \"scales\": {
-      \"y\": {
-        \"beginAtZero\": true,
-        \"title\": {
-          \"display\": true,
-          \"text\": \"GB\"
-        }
-      }
-    }
-  }
+  "type": "bar",
+  "data": {
+    "labels": ${LABELS_JSON},
+    "datasets": [{
+      "label": "Storage (GB)",
+      "data": ${DATA_JSON},
+      "backgroundColor": ${COLORS_JSON},
+      "barPercentage": 0.6
+    }]
+  },
+  "options": {
+    "plugins": {
+      "title": {
+        "display": true,
+        "text": "Daily Storage Utilization (GB)",
+        "font": { "size": 18 }
+      },
+      "legend": {
+        "display": false
+      },
+      "datalabels": {
+        "display": true,
+        "color": "black",
+        "anchor": "end",
+        "align": "end",
+        "font": { "weight": "bold", "size": 12 }
+      }
+    },
+    "scales": {
+      "y": {
+        "beginAtZero": true,
+        "title": {
+          "display": true,
+          "text": "GB"
+        }
+      }
+    }
+  }
 }
-")"
+EOF
+)"
 
 # === TOP 5 AGGREGATED BACKUPS (Normalized to MB) ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
-  CASE size_name
-    WHEN 'B' THEN size / 1024 / 1024
-    WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
-    ELSE 0
-  END
+  CASE size_name
+    WHEN 'B' THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
 ), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
 ORDER BY SUM(
-  CASE size_name
-    WHEN 'B' THEN size / 1024 / 1024
-    WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
-    ELSE 0
-  END
+  CASE size_name
+    WHEN 'B' THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
 ) DESC
 LIMIT 5;
 ")
@@ -159,31 +171,31 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4
 .container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 12px rgba(75, 40, 109, 0.1); }
 h1, h2, h3 { color: #4B286D; text-align: center; }
 table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  border: 1px solid #e0d6f0;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  border: 1px solid #e0d6f0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
 }
 th {
-  background-color: #4B286D;
-  color: white;
-  padding: 10px;
-  text-align: left;
+  background-color: #4B286D;
+  color: white;
+  padding: 10px;
+  text-align: left;
 }
 td {
-  padding: 10px;
-  border-bottom: 1px solid #eee;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
 }
 tr:nth-child(even) { background-color: #f9f9f9; }
 .chart-frame {
-  border: 1px solid #e0d6f0;
-  border-radius: 10px;
-  padding: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-  background-color: #fff;
+  border: 1px solid #e0d6f0;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  background-color: #fff;
 }
 </style></head><body><div class='container'>"
 
@@ -198,7 +210,7 @@ echo "<td class='chart-frame' style='width: 50%; text-align: center;'><img src='
 
 echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-    echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
+    echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
 done
 echo "</table>"
 
