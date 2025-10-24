@@ -159,8 +159,7 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
-BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
-
+BAR_CHART_URL="https://quickchart.io/chart?width=600&height=350&backgroundColor=white&c=$(python3 -c 'import json,sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))' <<< "${BAR_CHART_JSON}")"
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
