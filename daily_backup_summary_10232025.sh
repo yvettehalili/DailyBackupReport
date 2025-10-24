@@ -10,6 +10,31 @@ DIR="backup"
 mkdir -p "${DIR}"
 emailFile="${DIR}/daily_backup_report.html"
 
+# --- API Configuration ---
+QUICKCHART_API="https://quickchart.io/chart/create"
+
+# === HELPER FUNCTION: POST JSON and Get Short URL (The definitive fix) ===
+post_chart_json() {
+    local json_payload="${1}"
+    local width="${2:-350}"
+    local height="${3:-350}"
+    local background_color="${4:-white}"
+
+    # Use curl to POST the JSON data and request a short URL
+    local URL
+    URL=$(curl -s -X POST "${QUICKCHART_API}" \
+        -H "Content-Type: application/json" \
+        -d "{ \"chart\": ${json_payload}, \"width\": ${width}, \"height\": ${height}, \"backgroundColor\": \"${background_color}\" }" \
+        | jq -r '.url')
+    
+    if [[ -z "$URL" || "$URL" == "null" ]]; then
+        # Render a placeholder image if the API call fails
+        echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+RENDER+FAILED"
+    else
+        echo "$URL"
+    fi
+}
+
 # === EXECUTIVE METRICS ===
 read total_count error_count <<< $(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT COUNT(*), SUM(IF(size = 0.00 AND size_name = 'B', 1, 0))
@@ -23,7 +48,7 @@ error_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf 
 
 total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
+    WHEN 'B'  THEN size/1024/1024/1024
     WHEN 'KB' THEN size/1024/1024
     WHEN 'MB' THEN size/1024
     WHEN 'GB' THEN size
@@ -31,34 +56,6 @@ SELECT ROUND(SUM(CASE size_name
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
 ")
-
-# === DONUT CHART ===
-DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
-{
-  "type": "doughnut",
-  "data": {
-    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
-    "datasets": [{
-      "data": [${success_count}, ${error_count}],
-      "backgroundColor": ["#4B286D", "#00B7C3"]
-    }]
-  },
-  "options": {
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Backup Status Overview",
-        "color": "#4B286D",
-        "font": { "size": 18, "weight": "bold" }
-      },
-      "legend": {
-        "position": "bottom"
-      }
-    }
-  }
-}
-EOF
-)"
 
 # === BAR CHART: Storage per DB Engine (Data Preparation) ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
@@ -78,6 +75,8 @@ DATA=()
 COLORS=()
 
 while IFS=$'\t' read -r engine total; do
+  if [[ -z "$engine" ]]; then continue; fi
+  
   LABELS+=("$engine")
   DATA+=("$total")
   case "$engine" in
@@ -88,14 +87,40 @@ while IFS=$'\t' read -r engine total; do
     *) COLOR_CODE="#B0BEC5" ;;
   esac
   COLORS+=("$COLOR_CODE")
-done <<< "${engine_storage}"
+done <<< "$(echo "${engine_storage}" | tr -d '\r')"
 
-# === FIXED jq Section ===
+# Build JSON array strings using jq for perfect formatting
 LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === BAR CHART (Beautiful Aesthetic) ===
+# === 1. DONUT CHART (POST Method) ===
+DONUT_CHART_JSON=$(cat <<EOF
+{
+  "type": "doughnut",
+  "data": {
+    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
+    "datasets": [{
+      "data": [${success_count}, ${error_count}],
+      "backgroundColor": ["#6A4C93", "#00A6A6"],
+      "borderWidth": 2
+    }]
+  },
+  "options": {
+    "plugins": {
+      "title": { "display": true, "text": "Backup Status Overview", "color": "#4B286D", "font": { "size": 18, "weight": "bold" } },
+      "legend": { "position": "bottom", "labels": { "color": "#4B286D", "font": { "weight": "bold" } } },
+      "tooltip": { "enabled": true }
+    },
+    "cutout": "65%"
+  }
+}
+EOF
+)
+DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
+
+
+# === 2. BAR CHART (POST Method - The Fix) ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -110,40 +135,22 @@ BAR_CHART_JSON=$(cat <<EOF
   },
   "options": {
     "plugins": {
-      "title": {
-        "display": true,
-        "text": "Daily Backup Storage by DB Engine",
-        "color": "#4B286D",
-        "font": { "size": 20, "weight": "bold" }
-      },
-      "legend": {
-        "display": false
-      },
+      "title": { "display": true, "text": "Daily Backup Storage by DB Engine", "color": "#4B286D", "font": { "size": 20, "weight": "bold" } },
+      "legend": { "display": false },
       "datalabels": {
         "display": true,
         "color": "#333333",
         "anchor": "end",
         "align": "top",
         "font": { "weight": "bold", "size": 12 },
-        "formatter": "(value) => value + ' GB'"
+        "formatter": "function(value) { return value + ' GB'; }"
       }
     },
     "scales": {
-      "x": {
-        "ticks": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        },
-        "grid": { "display": false }
-      },
+      "x": { "ticks": { "color": "#4B286D", "font": { "weight": "bold" } }, "grid": { "display": false } },
       "y": {
         "beginAtZero": true,
-        "title": {
-          "display": true,
-          "text": "Storage (GB)",
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        },
+        "title": { "display": true, "text": "Storage (GB)", "color": "#4B286D", "font": { "weight": "bold" } },
         "ticks": { "color": "#333333" },
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
@@ -152,8 +159,8 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
+BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
-BAR_CHART_URL="https://quickchart.io/chart?c=$(echo "${BAR_CHART_JSON}" | jq -sRr @uri)&backgroundColor=white&width=600&height=350"
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
