@@ -27,7 +27,7 @@ post_chart_json() {
         | jq -r '.url')
 
     if [[ -z "$URL" || "$URL" == "null" ]]; then
-        echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+RENDER+FAILED"
+        echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+FAILED"
     else
         echo "$URL"
     fi
@@ -91,7 +91,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === 1. DONUT CHART ===
+# === DONUT CHART ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -123,7 +123,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === 2. BAR CHART ===
+# === BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -233,23 +233,24 @@ cat <<EOF > "${emailFile}"
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 0 10px rgba(0,0,0,0.05);
-    padding: 15px;
+    padding: 20px;
     margin-bottom: 30px;
+    border: 1px solid #e1e1e1;
   }
   .metric {
     text-align: center;
+    flex: 1;
   }
   .metric-value {
     font-size: 22px;
     font-weight: bold;
+    color: #4B286D;
   }
   .metric-label {
     font-size: 13px;
     color: #666;
+    margin-top: 5px;
   }
-  .success { color: #2e7d32; }
-  .fail { color: #d32f2f; }
-  .neutral { color: #1976d2; }
   .charts-row {
     display: flex;
     justify-content: space-between;
@@ -262,8 +263,9 @@ cat <<EOF > "${emailFile}"
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    border: 1px solid #e1e1e1;
     text-align: center;
-    padding: 15px;
+    padding: 20px;
   }
   .chart-title {
     font-weight: bold;
@@ -282,6 +284,7 @@ cat <<EOF > "${emailFile}"
     background: #fff;
     border-radius: 12px;
     overflow: hidden;
+    border: 1px solid #e1e1e1;
     box-shadow: 0 0 10px rgba(0,0,0,0.05);
   }
   th, td {
@@ -289,7 +292,7 @@ cat <<EOF > "${emailFile}"
     text-align: left;
   }
   th {
-    background-color: #2b3d52;
+    background-color: #4B286D;
     color: #fff;
   }
   tr:nth-child(even) { background-color: #f8f9fa; }
@@ -304,19 +307,19 @@ cat <<EOF > "${emailFile}"
 </head>
 <body>
 
-  <h2>📦 Backup Summary - ${REPORT_DATE}</h2>
+  <h2> Backup Summary - ${REPORT_DATE}</h2>
 
   <div class="summary-box">
     <div class="metric">
-      <div class="metric-value neutral">${TOTAL_SIZE_GB} GB</div>
+      <div class="metric-value">${TOTAL_SIZE_GB} GB</div>
       <div class="metric-label">Total Storage</div>
     </div>
     <div class="metric">
-      <div class="metric-value fail">${error_count}</div>
+      <div class="metric-value">${error_count}</div>
       <div class="metric-label">Failures</div>
     </div>
     <div class="metric">
-      <div class="metric-value success">${success_rate}%</div>
+      <div class="metric-value">${success_rate}%</div>
       <div class="metric-label">Success Rate</div>
     </div>
   </div>
@@ -354,4 +357,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo "Email sent successfully to yvette.halili@telusinternational.com"
+echo "✅ Email sent successfully to yvette.halili@telusinternational.com"
