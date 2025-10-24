@@ -61,11 +61,11 @@ EOF
 # === BAR CHART: Storage per DB Engine (Data Preparation) ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
-    WHEN 'KB' THEN size/1024/1024
-    WHEN 'MB' THEN size/1024
-    WHEN 'GB' THEN size
-    ELSE 0 END), 1) AS TotalGB
+    WHEN 'B' THEN size/1024/1024/1024
+    WHEN 'KB' THEN size/1024/1024
+    WHEN 'MB' THEN size/1024
+    WHEN 'GB' THEN size
+    ELSE 0 END), 1) AS TotalGB
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY DB_engine;
@@ -76,67 +76,86 @@ DATA_JSON="["
 COLORS_JSON="["
 
 while IFS=$'\t' read -r engine total; do
-    LABELS_JSON+=\"$engine\","
+    LABELS_JSON+="\"$engine\","
     DATA_JSON+="$total,"
-    
-    # Assign specific colors for branding consistency
-    if [[ "$engine" == "MYSQL" ]]; then COLOR_CODE="#4B286D"
-    elif [[ "$engine" == "PGSQL" ]]; then COLOR_CODE="#00B7C3"
-    elif [[ "$engine" == "MSSQL" ]]; then COLOR_CODE="#78BE20"
-    else COLOR_CODE="#A0A0A0"
-    fi
-    COLORS_JSON+=\"$COLOR_CODE\","
+    # Use elegant, on-brand color palette
+    case "$engine" in
+        MYSQL) COLOR_CODE="#6A4C93" ;;   # deep purple
+        PGSQL) COLOR_CODE="#00A6A6" ;;   # cyan teal
+        MSSQL) COLOR_CODE="#8BC34A" ;;   # green
+        ORACLE) COLOR_CODE="#FF7043" ;;  # coral orange
+        *) COLOR_CODE="#B0BEC5" ;;       # soft gray
+    esac
+    COLORS_JSON+="\"$COLOR_CODE\","
 done <<< "${engine_storage}"
 
-# Close the JSON arrays
+# Trim trailing commas
 LABELS_JSON="${LABELS_JSON%,}]"
 DATA_JSON="${DATA_JSON%,}]"
 COLORS_JSON="${COLORS_JSON%,}]"
 
-# === BAR CHART (Image Generation - Using safer <<EOF structure) ===
-BAR_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
+# === BAR CHART (Beautiful Aesthetic) ===
+BAR_CHART_JSON=$(cat <<EOF
 {
-  "type": "bar",
-  "data": {
-    "labels": ${LABELS_JSON},
-    "datasets": [{
-      "label": "Storage (GB)",
-      "data": ${DATA_JSON},
-      "backgroundColor": ${COLORS_JSON},
-      "barPercentage": 0.6
-    }]
-  },
-  "options": {
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Daily Storage Utilization (GB)",
-        "font": { "size": 18 }
-      },
-      "legend": {
-        "display": false
-      },
-      "datalabels": {
-        "display": true,
-        "color": "black",
-        "anchor": "end",
-        "align": "end",
-        "font": { "weight": "bold", "size": 12 }
-      }
-    },
-    "scales": {
-      "y": {
-        "beginAtZero": true,
-        "title": {
-          "display": true,
-          "text": "GB"
-        }
-      }
-    }
-  }
+  "type": "bar",
+  "data": {
+    "labels": ${LABELS_JSON},
+    "datasets": [{
+      "label": "Total Storage (GB)",
+      "data": ${DATA_JSON},
+      "backgroundColor": ${COLORS_JSON},
+      "borderRadius": 10
+    }]
+  },
+  "options": {
+    "plugins": {
+      "title": {
+        "display": true,
+        "text": "Daily Backup Storage by DB Engine",
+        "color": "#4B286D",
+        "font": { "size": 20, "weight": "bold" }
+      },
+      "legend": {
+        "display": false
+      },
+      "datalabels": {
+        "display": true,
+        "color": "#333333",
+        "anchor": "end",
+        "align": "top",
+        "font": { "weight": "bold", "size": 12 },
+        "formatter": (value) => value + ' GB'
+      }
+    },
+    "scales": {
+      "x": {
+        "ticks": {
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
+        "grid": { "display": false }
+      },
+      "y": {
+        "beginAtZero": true,
+        "title": {
+          "display": true,
+          "text": "Storage (GB)",
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
+        "ticks": {
+          "color": "#333333"
+        },
+        "grid": { "color": "rgba(200,200,200,0.2)" }
+      }
+    }
+  }
 }
 EOF
-)"
+)
+
+BAR_CHART_URL="https://quickchart.io/chart?c=$(echo "${BAR_CHART_JSON}" | jq -sRr @uri)"
+BAR_CHART_URL="${BAR_CHART_URL}&backgroundColor=white&width=600&height=350"
 
 # === TOP 5 AGGREGATED BACKUPS (Normalized to MB) ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
