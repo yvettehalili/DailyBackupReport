@@ -57,7 +57,7 @@ DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
 EOF
 )"
 
-# === BAR CHART: Storage per DB Engine ===
+# === STORAGE PER DB ENGINE ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
@@ -69,58 +69,6 @@ FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY DB_engine;
 ")
-
-labels=""
-values=""
-colors=""
-while IFS=$'\t' read -r engine total; do
-    labels="${labels}\"${engine}\","
-    values="${values}${total},"
-    colors="${colors}\"#78BE20\","  # Telus green
-done <<< "${engine_storage}"
-
-labels="[${labels%,}]"
-values="[${values%,}]"
-colors="[${colors%,}]"
-
-STACKED_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
-{
-  \"type\": \"bar\",
-  \"data\": {
-    \"labels\": ${labels},
-    \"datasets\": [{
-      \"label\": \"Storage (GB)\",
-      \"data\": ${values},
-      \"backgroundColor\": ${colors}
-    }]
-  },
-  \"options\": {
-    \"plugins\": {
-      \"title\": {
-        \"display\": true,
-        \"text\": \"Storage Summary by Database Type\",
-        \"font\": { \"size\": 18 }
-      },
-      \"datalabels\": {
-        \"display\": true,
-        \"color\": \"white\",
-        \"anchor\": \"center\",
-        \"align\": \"center\",
-        \"font\": { \"weight\": \"bold\", \"size\": 14 }
-      }
-    },
-    \"scales\": {
-      \"y\": {
-        \"beginAtZero\": true,
-        \"title\": {
-          \"display\": true,
-          \"text\": \"GB\"
-        }
-      }
-    }
-  }
-}
-")"
 
 # === TOP 5 AGGREGATED BACKUPS (Normalized to MB) ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
@@ -153,7 +101,7 @@ LIMIT 5;
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
 body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; }
 .container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 12px rgba(75, 40, 109, 0.1); }
-h1, h2 { color: #4B286D; text-align: center; }
+h1, h2, h3 { color: #4B286D; text-align: center; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -190,7 +138,14 @@ echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</spa
 echo "</div>"
 
 echo "<table><tr><td class='chart-frame' style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%;'></td>"
-echo "<td class='chart-frame' style='width: 50%; text-align: center;'><img src='${STACKED_CHART_URL}' style='max-width: 100%;'></td></tr></table>"
+echo "<td class='chart-frame' style='width: 50%; vertical-align: top;'>"
+echo "<h3 style='color: #4B286D; margin-bottom: 10px;'>Daily Storage Utilization (GB)</h3>"
+echo "<table style='width: 100%; border-collapse: collapse; border: 1px solid #e0d6f0; border-radius: 6px; box-shadow: 0 0 6px rgba(0,0,0,0.05);'>"
+echo "<tr style='background-color: #4B286D; color: white;'><th>Database Engine</th><th>Total Size (GB)</th></tr>"
+echo "${engine_storage}" | while IFS=$'\t' read -r engine gb; do
+    echo "<tr><td style='padding: 8px;'>${engine}</td><td style='padding: 8px;'>${gb}</td></tr>"
+done
+echo "</table></td></tr></table>"
 
 echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
