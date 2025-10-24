@@ -105,8 +105,7 @@ DONUT_CHART_JSON=$(cat <<EOF
   "options": {
     "plugins": {
       "title": { "display": true, "text": "Backup Status Overview", "color": "#4B286D", "font": { "size": 18, "weight": "bold" } },
-      "legend": { "position": "bottom", "labels": { "color": "#4B286D", "font": { "weight": "bold" } } },
-      "tooltip": { "enabled": true }
+      "legend": { "position": "bottom", "labels": { "color": "#4B286D", "font": { "weight": "bold" } } }
     },
     "cutout": "65%"
   }
@@ -188,10 +187,24 @@ cat <<EOF
 <head>
 <meta charset="UTF-8">
 <style>
-body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f8f8fc; color: #333; padding: 20px; }
-.container { max-width: 900px; margin: auto; background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-h1, h2, h3 { color: #4B286D; text-align: center; }
-
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background-color: #f8f8fc;
+  color: #333;
+  padding: 20px;
+}
+.container {
+  max-width: 900px;
+  margin: auto;
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+}
+h1, h2, h3 {
+  color: #4B286D;
+  text-align: center;
+}
 .summary {
   background-color: #f4effc;
   border-left: 6px solid #4B286D;
@@ -200,9 +213,17 @@ h1, h2, h3 { color: #4B286D; text-align: center; }
   margin: 20px 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
-.summary p { margin: 6px 0; font-size: 15px; color: #333; }
-.summary span.label { font-weight: bold; color: #4B286D; width: 130px; display: inline-block; }
-
+.summary p {
+  margin: 6px 0;
+  font-size: 15px;
+  color: #333;
+}
+.summary span.label {
+  font-weight: bold;
+  color: #4B286D;
+  width: 130px;
+  display: inline-block;
+}
 .chart-table-container {
   display: flex;
   justify-content: space-between;
@@ -219,7 +240,6 @@ h1, h2, h3 { color: #4B286D; text-align: center; }
   box-shadow: 0 2px 10px rgba(75,40,109,0.08);
   text-align: center;
 }
-
 .table-box {
   width: 100%;
   margin-top: 25px;
@@ -228,12 +248,25 @@ h1, h2, h3 { color: #4B286D; text-align: center; }
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(75,40,109,0.08);
 }
-
-table { width: 100%; border-collapse: collapse; }
-th { background-color: #4B286D; color: white; padding: 10px; font-weight: 600; font-size: 14px; }
-td { padding: 8px; text-align: left; font-size: 13.5px; color: #4B286D; border-bottom: 1px solid #eee; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  background-color: #4B286D;
+  color: white;
+  padding: 10px;
+  font-weight: 600;
+  font-size: 14px;
+}
+td {
+  padding: 8px;
+  text-align: left;
+  font-size: 13.5px;
+  color: #4B286D;
+  border-bottom: 1px solid #eee;
+}
 tr:nth-child(even) { background-color: #faf8ff; }
-
 .footer {
   text-align: center;
   color: #888;
