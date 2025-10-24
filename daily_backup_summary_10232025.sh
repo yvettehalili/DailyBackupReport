@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # === CONFIGURATION ===
 DB_USER="trtel.backup"
 DB_PASS="Telus2017#"
@@ -9,199 +8,158 @@ DIR="backup"
 mkdir -p "${DIR}"
 emailFile="${DIR}/daily_backup_report.html"
 
-# === EXECUTIVE METRICS ===
-read total_count error_count <<< $(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
-SELECT COUNT(*), SUM(IF(size = 0.00 AND size_name = 'B', 1, 0))
-FROM daily_backup_report
-WHERE backup_date = '${REPORT_DATE}';
+# === FETCH DATA FROM DATABASE ===
+SUMMARY=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D "${DB_NAME}" -N -e "
+  SELECT 
+    SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END),
+    SUM(CASE WHEN status='FAILED' THEN 1 ELSE 0 END),
+    ROUND(SUM(
+      CASE size_name
+        WHEN 'B' THEN size/1024/1024/1024
+        WHEN 'KB' THEN size/1024/1024
+        WHEN 'MB' THEN size/1024
+        ELSE size
+      END
+    ), 2)
+  FROM backup_inventory
+  WHERE backup_date='${REPORT_DATE}';
 ")
 
-success_count=$((total_count - error_count))
-success_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${success_count}/${total_count})*100}}")
-error_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${error_count}/${total_count})*100}}")
+SUCCESS_COUNT=$(echo "$SUMMARY" | awk '{print $1}')
+FAIL_COUNT=$(echo "$SUMMARY" | awk '{print $2}')
+TOTAL_SIZE=$(echo "$SUMMARY" | awk '{print $3}')
+TOTAL_COUNT=$((SUCCESS_COUNT + FAIL_COUNT))
 
-total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
-SELECT ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
-    WHEN 'KB' THEN size/1024/1024
-    WHEN 'MB' THEN size/1024
-    WHEN 'GB' THEN size
-    ELSE 0 END), 2)
-FROM daily_backup_report
-WHERE backup_date = '${REPORT_DATE}';
+if [ "$TOTAL_COUNT" -eq 0 ]; then
+  PERCENT_SUCCESS=0
+else
+  PERCENT_SUCCESS=$((SUCCESS_COUNT * 100 / TOTAL_COUNT))
+fi
+
+# === DETERMINE STATUS ===
+if [ "$PERCENT_SUCCESS" -eq 100 ]; then
+  STATUS="HIGH SUCCESS"
+  COLOR="green"
+elif [ "$PERCENT_SUCCESS" -ge 80 ]; then
+  STATUS="PARTIAL SUCCESS"
+  COLOR="orange"
+else
+  STATUS="FAILED"
+  COLOR="red"
+fi
+
+# === FETCH TOP 5 BACKUPS ===
+TOP_BACKUPS=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D "${DB_NAME}" -e "
+  SELECT server_name, db_technology, 
+  ROUND(CASE size_name
+    WHEN 'B' THEN size/1024/1024
+    WHEN 'KB' THEN size/1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size*1024
+    ELSE size
+  END, 2) AS size_in_mb
+  FROM backup_inventory
+  WHERE backup_date='${REPORT_DATE}'
+  ORDER BY size_in_mb DESC
+  LIMIT 5;
 ")
 
-# === DONUT CHART ===
-DONUT_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
-{
-  "type": "doughnut",
-  "data": {
-    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
-    "datasets": [{
-      "data": [${success_count}, ${error_count}],
-      "backgroundColor": ["#4B286D", "#00B7C3"]
-    }]
-  },
-  "options": {
-    "plugins": {
-      "title": {"display": true, "text": "Backup Status Overview"},
-      "legend": {"position": "bottom"}
-    }
-  }
-}
-EOF
-)"
-
-# === BAR CHART: Storage per DB Engine ===
-engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
-SELECT DB_engine, ROUND(SUM(CASE size_name
-    WHEN 'B' THEN size/1024/1024/1024
-    WHEN 'KB' THEN size/1024/1024
-    WHEN 'MB' THEN size/1024
-    WHEN 'GB' THEN size
-    ELSE 0 END), 1) AS TotalGB
-FROM daily_backup_report
-WHERE backup_date = '${REPORT_DATE}'
-GROUP BY DB_engine;
-")
-
+# === PREPARE ARRAYS FOR CHART ===
 LABELS=()
 DATA=()
-COLORS=()
-
-while IFS=$'\t' read -r engine total; do
-  [[ -z "$engine" ]] && continue
-  LABELS+=("$engine")
-  DATA+=("$total")
-
-  if [[ "$engine" == "MYSQL" ]]; then COLOR_CODE="#4B286D"
-  elif [[ "$engine" == "PGSQL" ]]; then COLOR_CODE="#00B7C3"
-  elif [[ "$engine" == "MSSQL" ]]; then COLOR_CODE="#78BE20"
-  else COLOR_CODE="#A0A0A0"
+while IFS=$'\t' read -r SERVER ENGINE SIZE_MB; do
+  if [ "$SERVER" != "server_name" ]; then
+    LABELS+=("$SERVER")
+    DATA+=("$SIZE_MB")
   fi
-  COLORS+=("$COLOR_CODE")
-done <<< "$engine_storage"
+done < <(echo "$TOP_BACKUPS" | tail -n +2)
 
-# ✅ FIXED JSON PARSING
+# === FIXED JSON CONVERSION ===
 LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -R -s -c 'split("\n") | map(select(length>0))')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -R -s -c 'split("\n") | map(select(length>0)) | map(tonumber)')
-COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -R -s -c 'split("\n") | map(select(length>0))')
 
-# === BAR CHART URL ===
-BAR_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<EOF
-{
-  "type": "bar",
-  "data": {
-    "labels": ${LABELS_JSON},
-    "datasets": [{
-      "label": "Storage (GB)",
-      "data": ${DATA_JSON},
-      "backgroundColor": ${COLORS_JSON},
-      "barPercentage": 0.6
-    }]
-  },
-  "options": {
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Daily Storage Utilization (GB)",
-        "font": {"size": 18}
-      },
-      "legend": {"display": false},
-      "datalabels": {
-        "display": true,
-        "color": "black",
-        "anchor": "end",
-        "align": "end",
-        "font": {"weight": "bold", "size": 12}
-      }
-    },
-    "scales": {
-      "y": {"beginAtZero": true, "title": {"display": true, "text": "GB"}}
-    }
-  }
-}
+# === GENERATE EMAIL REPORT (RESTORED ORIGINAL DESIGN) ===
+cat > "$emailFile" <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Daily Backup Report - ${REPORT_DATE}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #fdfdfd; color: #333; margin: 0; padding: 0; }
+    h2 { color: #4B0082; text-align: center; margin-top: 20px; }
+    .summary-box { background: #f4f0fa; border-left: 6px solid #4B0082; margin: 20px auto; width: 90%; padding: 10px 20px; border-radius: 6px; }
+    .summary-box b { display: block; }
+    .charts { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; }
+    canvas { margin: 20px; }
+    table { width: 90%; margin: 0 auto; border-collapse: collapse; font-size: 14px; }
+    th { background-color: #4B0082; color: white; padding: 8px; text-align: left; }
+    td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
+    h3 { color: #4B0082; text-align: center; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <h2>Daily Backup Report - ${REPORT_DATE}</h2>
+
+  <div class="summary-box">
+    <b>Executive Summary:</b>
+    <span style="color:${COLOR};">Status: ${STATUS} (${PERCENT_SUCCESS}%)</span> |
+    Total Failures: ${FAIL_COUNT} | Total Storage: ${TOTAL_SIZE} GB
+  </div>
+
+  <div class="charts">
+    <canvas id="donutChart" width="300" height="300"></canvas>
+    <canvas id="barChart" width="600" height="300"></canvas>
+  </div>
+
+  <h3>Top 5 Largest Backups</h3>
+  <table>
+    <tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>
 EOF
-)"
 
-# === TOP 5 LARGEST BACKUPS ===
-top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
-SELECT Server, DB_engine,
-CONCAT(ROUND(SUM(CASE size_name
-  WHEN 'B' THEN size / 1024 / 1024
-  WHEN 'KB' THEN size / 1024
-  WHEN 'MB' THEN size
-  WHEN 'GB' THEN size * 1024
-  ELSE 0 END), 2), ' MB') AS TotalSize
-FROM daily_backup_report
-WHERE backup_date = '${REPORT_DATE}'
-GROUP BY Server, DB_engine
-ORDER BY SUM(
-  CASE size_name
-    WHEN 'B' THEN size / 1024 / 1024
-    WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
-    ELSE 0 END
-) DESC
-LIMIT 5;
-")
-
-# === EMAIL HTML ===
-{
-echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; }
-.container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 12px rgba(75, 40, 109, 0.1); }
-h1, h2, h3 { color: #4B286D; text-align: center; }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  border: 1px solid #e0d6f0;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-}
-th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
-td { padding: 10px; border-bottom: 1px solid #eee; }
-tr:nth-child(even) { background-color: #f9f9f9; }
-.chart-frame {
-  border: 1px solid #e0d6f0;
-  border-radius: 10px;
-  padding: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-  background-color: #fff;
-}
-</style></head><body><div class='container'>"
-
-echo "<h1>Daily Backup Report - ${REPORT_DATE}</h1>"
-echo "<div style='padding: 15px; background-color: #f7f3fb; border-left: 5px solid #4B286D; margin-bottom: 20px;'>"
-echo "<p><strong>Executive Summary:</strong><br>"
-echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</span> | Total Failures: ${error_count} | Total Storage: ${total_storage} GB</p>"
-echo "</div>"
-
-echo "<table><tr><td class='chart-frame' style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%;'></td>"
-echo "<td class='chart-frame' style='width: 50%; text-align: center;'><img src='${BAR_CHART_URL}' style='max-width: 100%;'></td></tr></table>"
-
-echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
-echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-    echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
+echo "$TOP_BACKUPS" | tail -n +2 | while IFS=$'\t' read -r SERVER ENGINE SIZE_MB; do
+  echo "<tr><td>${SERVER}</td><td>${ENGINE}</td><td>${SIZE_MB} MB</td></tr>" >> "$emailFile"
 done
-echo "</table>"
 
-echo "<div style='text-align: center; margin-top: 30px; color: #4B286D;'>Report generated by Database Engineering</div>"
-echo "</div></body></html>"
-} > "${emailFile}"
+cat >> "$emailFile" <<EOF
+  </table>
+
+  <script>
+    const donutCtx = document.getElementById('donutChart');
+    new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Success (%)', 'Failure (%)'],
+        datasets: [{
+          data: [${PERCENT_SUCCESS}, ${FAIL_COUNT}],
+          backgroundColor: ['#4B0082', '#C0C0C0']
+        }]
+      },
+      options: { responsive: false }
+    });
+
+    const barCtx = document.getElementById('barChart');
+    new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: ${LABELS_JSON},
+        datasets: [{
+          label: 'Backup Size (MB)',
+          data: ${DATA_JSON},
+          backgroundColor: '#4B0082'
+        }]
+      },
+      options: {
+        responsive: false,
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  </script>
+</body>
+</html>
+EOF
 
 # === SEND EMAIL ===
-{
-echo "To: yvette.halili@telusinternational.com"
-echo "From: no-reply@telusinternational.com"
-echo "MIME-Version: 1.0"
-echo "Content-Type: text/html; charset=utf-8"
-echo "Subject: Daily Backup Report - ${REPORT_DATE}"
-echo ""
-cat "${emailFile}"
-} | /usr/sbin/sendmail -t
-
+mail -a "Content-Type: text/html" -s "Daily Backup Report - ${REPORT_DATE}" yvette.halili@telusinternational.com < "$emailFile"
 echo "Email sent to yvette.halili@telusinternational.com"
