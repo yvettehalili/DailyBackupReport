@@ -129,24 +129,6 @@ tr:nth-child(even) { background-color: #f9f9f9; }
   box-shadow: 0 0 8px rgba(0,0,0,0.05);
   background-color: #fff;
 }
-.bar-container {
-  margin-bottom: 12px;
-}
-.bar-label {
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-.bar {
-  background-color: #e0d6f0;
-  border-radius: 6px;
-  overflow: hidden;
-}
-.bar-fill {
-  background-color: #78BE20;
-  color: white;
-  padding: 8px;
-  font-weight: bold;
-}
 </style></head><body><div class='container'>"
 
 echo "<h1>Daily Backup Report - ${REPORT_DATE}</h1>"
@@ -158,8 +140,9 @@ echo "</div>"
 echo "<table><tr><td class='chart-frame' style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%;'></td>"
 echo "<td class='chart-frame' style='width: 50%; vertical-align: top;'>"
 echo "<h3 style='color: #4B286D; margin-bottom: 10px;'>Daily Storage Utilization (GB)</h3>"
+echo "<div style='border: 1px solid #e0d6f0; border-radius: 10px; padding: 20px; background-color: #f7f3fb; box-shadow: 0 0 8px rgba(0,0,0,0.05); margin-bottom: 10px;'>"
+echo "<div style='display: flex; justify-content: space-around; align-items: flex-end; height: 200px;'>"
 
-# === EMBEDDED BAR CHART ===
 max=0
 declare -A engine_map
 while IFS=$'\t' read -r engine gb; do
@@ -170,11 +153,14 @@ done <<< "${engine_storage}"
 
 for engine in "${!engine_map[@]}"; do
   percent=$(awk "BEGIN {printf \"%.0f\", (${engine_map[$engine]} / $max) * 100}")
-  echo "<div class='bar-container'><div class='bar-label'>${engine}</div>"
-  echo "<div class='bar'><div class='bar-fill' style='width:${percent}%;'>${engine_map[$engine]} GB</div></div></div>"
+  echo "<div style='text-align: center; width: 80px;'>"
+  echo "<div style='margin-bottom: 5px; font-weight: bold;'>${engine_map[$engine]} GB</div>"
+  echo "<div style='height:${percent}%; background-color:#78BE20; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'></div>"
+  echo "<div style='margin-top: 8px; font-weight: bold; color: #4B286D;'>${engine}</div>"
+  echo "</div>"
 done
 
-echo "</td></tr></table>"
+echo "</div></div></td></tr></table>"
 
 echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
