@@ -135,7 +135,12 @@ BAR_CHART_JSON=$(cat <<EOF
   },
   "options": {
     "plugins": {
-      "title": { "display": true, "text": "Daily Backup Storage by DB Engine", "color": "#4B286D", "font": { "size": 20, "weight": "bold" } },
+      "title": {
+        "display": true,
+        "text": "Daily Backup Storage by DB Engine",
+        "color": "#4B286D",
+        "font": { "size": 20, "weight": "bold" }
+      },
       "legend": { "display": false },
       "datalabels": {
         "display": true,
@@ -147,10 +152,21 @@ BAR_CHART_JSON=$(cat <<EOF
       }
     },
     "scales": {
-      "x": { "ticks": { "color": "#4B286D", "font": { "weight": "bold" } }, "grid": { "display": false } },
+      "x": {
+        "ticks": {
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
+        "grid": { "display": false }
+      },
       "y": {
         "beginAtZero": true,
-        "title": { "display": true, "text": "Storage (GB)", "color": "#4B286D", "font": { "weight": "bold" } },
+        "title": {
+          "display": true,
+          "text": "Storage (GB)",
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
         "ticks": { "color": "#333333" },
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
@@ -159,7 +175,8 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
-BAR_CHART_URL="https://quickchart.io/chart?width=600&height=350&backgroundColor=white&c=$(python3 -c 'import json,sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))' <<< "${BAR_CHART_JSON}")"
+
+BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
