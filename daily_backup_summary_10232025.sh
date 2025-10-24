@@ -18,7 +18,7 @@ WHERE backup_date = '${REPORT_DATE}';
 
 success_count=$((total_count - error_count))
 success_rate=$(awk "BEGIN {printf \"%.1f\", (${success_count}/${total_count})*100}")
-error_rate=$(awk "BEGIN {printf \"%.1f\", (${error_count}/${total_count})*100")
+error_rate=$(awk "BEGIN {printf \"%.1f\", (${error_count}/${total_count})*100}")
 
 total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
@@ -91,11 +91,11 @@ BAR_CHART_URL="https://quickchart.io/chart?c=$(jq -sRr @uri <<< "
     \"datasets\": [{
       \"label\": \"Storage (GB)\",
       \"data\": ${values},
-      \"backgroundColor\": ${colors}
+      \"backgroundColor\": ${colors},
+      \"barPercentage\": 0.6
     }]
   },
   \"options\": {
-    \"indexAxis\": \"x\",
     \"plugins\": {
       \"title\": {
         \"display\": true,
