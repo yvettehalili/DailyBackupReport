@@ -116,13 +116,25 @@ DONUT_CHART_JSON=$(cat <<EOF
       "legend": {
         "position": "bottom",
         "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
+      },
+      "datalabels": {
+        "color": "#66CC33",        // TELUS green
+        "font": { "size": 18, "weight": "bold" },
+        "formatter": "(value, ctx) => {
+          const dataArr = ctx.chart.data.datasets[0].data;
+          const total = dataArr.reduce((a, b) => a + b, 0);
+          const percentage = ((value / total) * 100).toFixed(1) + '%';
+          return percentage;
+        }"
       }
     }
-  }
+  },
+  "plugins": ["chartjs-plugin-datalabels"]
 }
 EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
+
 
 # === BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
@@ -149,11 +161,17 @@ BAR_CHART_JSON=$(cat <<EOF
       "legend": {
         "display": true,
         "position": "bottom",
-        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
+        "align": "center",
+        "labels": {
+          "color": "#4B286D",
+          "font": { "weight": "bold" },
+          "padding": 20          // adds spacing between legend and chart
+        }
       },
       "datalabels": {
         "anchor": "end",
         "align": "top",
+        "offset": 4,            // creates small spacing above bars
         "color": "#4B286D",
         "font": { "weight": "bold", "size": 12 },
         "formatter": "(value) => value + ' GB'"
@@ -182,6 +200,7 @@ BAR_CHART_JSON=$(cat <<EOF
 EOF
 )
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
+
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
