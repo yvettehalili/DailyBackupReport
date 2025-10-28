@@ -91,7 +91,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === 1. DONUT CHART ===
+# === 1. DONUT CHART (Enhanced Aesthetics) ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -100,13 +100,32 @@ DONUT_CHART_JSON=$(cat <<EOF
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderWidth": 2
+      "borderWidth": 2,
+      "hoverOffset": 10
     }]
   },
   "options": {
     "plugins": {
-      "title": { "display": true, "text": "Backup Status Overview", "color": "#4B286D", "font": { "size": 18, "weight": "bold" } },
-      "legend": { "position": "bottom", "labels": { "color": "#4B286D", "font": { "weight": "bold" } } }
+      "title": { 
+        "display": true, 
+        "text": "Backup Status Overview", 
+        "color": "#4B286D", 
+        "font": { "size": 18, "weight": "bold" } 
+      },
+      "legend": { 
+        "position": "bottom", 
+        "labels": { "color": "#4B286D", "font": { "weight": "bold" } } 
+      },
+      "datalabels": {
+        "display": true,
+        "color": "#4B286D",
+        "font": { "weight": "bold", "size": 14 },
+        "formatter": "(value, ctx) => {
+          const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+          const percent = ((value / total) * 100).toFixed(1) + '%';
+          return percent;
+        }"
+      }
     },
     "cutout": "65%"
   }
@@ -115,7 +134,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === 2. BAR CHART ===
+# === 2. BAR CHART (Enhanced with Labels) ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -125,7 +144,8 @@ BAR_CHART_JSON=$(cat <<EOF
       "label": "Total Storage (GB)",
       "data": ${DATA_JSON},
       "backgroundColor": ${COLORS_JSON},
-      "borderRadius": 10
+      "borderRadius": 10,
+      "borderSkipped": false
     }]
   },
   "options": {
@@ -136,8 +156,17 @@ BAR_CHART_JSON=$(cat <<EOF
         "color": "#4B286D",
         "font": { "size": 20, "weight": "bold" }
       },
-      "legend": { "display": false }
+      "legend": { "display": false },
+      "datalabels": {
+        "display": true,
+        "anchor": "end",
+        "align": "top",
+        "color": "#4B286D",
+        "font": { "weight": "bold", "size": 13 },
+        "formatter": "(value) => value + ' GB'"
+      }
     },
+    "layout": { "padding": { "top": 20 } },
     "scales": {
       "x": {
         "ticks": { "color": "#4B286D", "font": { "weight": "bold" } },
@@ -235,10 +264,26 @@ h1 {
   color: #666;
   font-size: 13px;
 }
+.chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 10px;
+}
+.chart-frame {
+  flex: 1 1 45%;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  padding: 15px;
+  text-align: center;
+  border: 2px solid #f1e9ff;
+}
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 20px;
+  margin-top: 25px;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 0 8px rgba(0,0,0,0.05);
@@ -255,21 +300,6 @@ td {
 }
 tr:nth-child(even) {
   background-color: #faf8ff;
-}
-.chart-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 10px;
-}
-.chart-frame {
-  flex: 1 1 45%;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-  padding: 10px;
-  text-align: center;
 }
 .footer {
   text-align: center;
@@ -295,8 +325,8 @@ tr:nth-child(even) {
 </div>
 
 <div class='chart-row'>
-  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
-  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%; border-radius:20px;'></div>
+  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%; border-radius:20px;'></div>
 </div>
 
 <h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
