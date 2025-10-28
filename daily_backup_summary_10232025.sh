@@ -126,12 +126,10 @@ DONUT_CHART_JSON=$(cat <<EOF
         "font": { "size": 16, "weight": "bold" }
       }
     }
-  },
-  "plugins": ["chartjs-plugin-datalabels"]
+  }
 }
 EOF
 )
-DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
 # === BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
@@ -198,12 +196,11 @@ BAR_CHART_JSON=$(cat <<EOF
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
     }
-  },
-  "plugins": ["chartjs-plugin-datalabels"]
+  }
 }
 EOF
 )
-BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
+
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
