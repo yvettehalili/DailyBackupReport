@@ -90,7 +90,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === DONUT CHART (Visible white labels) ===
+# === DONUT CHART ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -133,7 +133,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === BAR CHART (Fixed label overlap) ===
+# === BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -205,6 +205,33 @@ EOF
 )
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
+# === TOP 5 AGGREGATED BACKUPS ===
+top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
+SELECT Server, DB_engine, CONCAT(ROUND(SUM(
+  CASE size_name
+    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
+), 2), ' MB') AS TotalSize
+FROM daily_backup_report
+WHERE backup_date = '${REPORT_DATE}'
+GROUP BY Server, DB_engine
+ORDER BY SUM(
+  CASE size_name
+    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
+    ELSE 0
+  END
+) DESC
+LIMIT 5;
+")
+")
+
 # === EMAIL HTML ===
 {
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
@@ -249,8 +276,7 @@ tr:nth-child(even) { background-color: #faf8ff; }
 <table>
 <tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-  size_gb=$(awk "BEGIN {printf \"%.2f\", ${size%% *} / 1024}")
-  echo "<tr><td>${server}</td><td>${engine}</td><td>${size_gb} GB</td></tr>"
+  echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
 done
 echo "</table>
 
@@ -270,4 +296,3 @@ cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
 echo "Email sent successfully to yvette.halili@telusinternational.com"
-
