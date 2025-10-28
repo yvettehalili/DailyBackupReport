@@ -177,7 +177,7 @@ BAR_CHART_JSON=$(jq -n \
           align: "end",
           color: "#4B286D",
           font: { weight: "bold", size: 14 },
-          formatter: "(value) => value.toFixed(1) + ' GB'"
+          formatter: "(value) => value.toFixed(1) + \\\" GB\\\""
         },
         title: {
           display: true,
