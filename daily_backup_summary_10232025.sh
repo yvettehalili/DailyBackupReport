@@ -91,7 +91,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === DONUT CHART ===
+# === 1. DONUT CHART (with visible % labels) ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -100,30 +100,36 @@ DONUT_CHART_JSON=$(cat <<EOF
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderWidth": 3,
-      "borderColor": "#ffffff"
+      "borderWidth": 2
     }]
   },
   "options": {
-    "cutout": "65%",
     "plugins": {
-      "title": {
-        "display": true,
-        "text": "Backup Status Overview",
-        "color": "#4B286D",
-        "font": { "size": 18, "weight": "bold" }
+      "title": { 
+        "display": true, 
+        "text": "Backup Status Overview", 
+        "color": "#4B286D", 
+        "font": { "size": 18, "weight": "bold" } 
       },
-      "legend": {
-        "position": "bottom",
-        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
+      "legend": { 
+        "position": "bottom", 
+        "labels": { 
+          "color": "#4B286D", 
+          "font": { "weight": "bold" } 
+        } 
       },
       "datalabels": {
         "display": true,
-        "color": "#4B286D",
-        "font": { "size": 16, "weight": "bold" },
-        "formatter": "(ctx, data) => data.chart.data.labels[ctx.dataIndex].split(' ')[1]"
+        "color": "#ffffff",
+        "font": { "weight": "bold", "size": 14 },
+        "formatter": (value, ctx) => {
+          const total = ctx.chart.data.datasets[0].data.reduce((a,b) => a + b, 0);
+          const percent = ((value / total) * 100).toFixed(1) + '%';
+          return percent;
+        }
       }
-    }
+    },
+    "cutout": "65%"
   },
   "plugins": ["chartjs-plugin-datalabels"]
 }
@@ -131,7 +137,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === BAR CHART ===
+# === 2. BAR CHART (with visible GB labels) ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -141,14 +147,10 @@ BAR_CHART_JSON=$(cat <<EOF
       "label": "Total Storage (GB)",
       "data": ${DATA_JSON},
       "backgroundColor": ${COLORS_JSON},
-      "borderRadius": 12,
-      "borderSkipped": false,
-      "barPercentage": 0.7,
-      "categoryPercentage": 0.6
+      "borderRadius": 10
     }]
   },
   "options": {
-    "layout": { "padding": { "top": 30, "bottom": 10 } },
     "plugins": {
       "title": {
         "display": true,
@@ -158,23 +160,17 @@ BAR_CHART_JSON=$(cat <<EOF
       },
       "legend": { "display": false },
       "datalabels": {
-        "display": true,
         "anchor": "end",
-        "align": "end",
-        "offset": 4,
+        "align": "top",
         "color": "#4B286D",
-        "font": { "weight": "bold", "size": 13 },
-        "formatter": "(value) => value + ' GB'"
+        "font": { "weight": "bold", "size": 12 },
+        "formatter": (value) => value + " GB"
       }
     },
     "scales": {
       "x": {
-        "ticks": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        },
-        "grid": { "display": false },
-        "title": { "display": false }
+        "ticks": { "color": "#4B286D", "font": { "weight": "bold" } },
+        "grid": { "display": false }
       },
       "y": {
         "beginAtZero": true,
@@ -193,10 +189,9 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
-
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
-# === TOP 5 BACKUPS ===
+# === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
   CASE size_name
@@ -204,8 +199,7 @@ SELECT Server, DB_engine, CONCAT(ROUND(SUM(
     WHEN 'KB' THEN size / 1024
     WHEN 'MB' THEN size
     WHEN 'GB' THEN size * 1024
-    ELSE 0
-  END
+    ELSE 0 END
 ), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
@@ -216,8 +210,7 @@ ORDER BY SUM(
     WHEN 'KB' THEN size / 1024
     WHEN 'MB' THEN size
     WHEN 'GB' THEN size * 1024
-    ELSE 0
-  END
+    ELSE 0 END
 ) DESC
 LIMIT 5;
 ")
@@ -225,33 +218,126 @@ LIMIT 5;
 # === EMAIL HTML ===
 {
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; }
-.container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 12px rgba(75, 40, 109, 0.1); }
-h1, h2, h3 { color: #4B286D; text-align: center; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #e0d6f0; border-radius: 8px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05); }
-th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
-td { padding: 10px; border-bottom: 1px solid #eee; }
-tr:nth-child(even) { background-color: #f9f9f9; }
-.chart-frame { border: 1px solid #e0d6f0; border-radius: 12px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.05); background-color: #fff; }
-</style></head><body><div class='container'>"
+body {
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f5f4fb;
+  color: #333;
+  padding: 40px 0;
+}
+.container {
+  max-width: 850px;
+  margin: auto;
+  background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%);
+  border-radius: 15px;
+  padding: 30px;
+  box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15);
+}
+h1 {
+  text-align: center;
+  color: #4B286D;
+  margin-bottom: 5px;
+}
+.subtitle {
+  text-align: center;
+  color: #777;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.summary-box {
+  display: flex;
+  justify-content: space-around;
+  background-color: #f7f3fb;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 25px;
+  border-left: 6px solid #4B286D;
+}
+.summary-item {
+  text-align: center;
+}
+.summary-item span {
+  display: block;
+  font-size: 22px;
+  color: #4B286D;
+  font-weight: bold;
+}
+.summary-item label {
+  color: #666;
+  font-size: 13px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+}
+th {
+  background-color: #4B286D;
+  color: white;
+  padding: 10px;
+  text-align: left;
+}
+td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+tr:nth-child(even) {
+  background-color: #faf8ff;
+}
+.chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 10px;
+}
+.chart-frame {
+  flex: 1 1 45%;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  padding: 10px;
+  text-align: center;
+}
+.footer {
+  text-align: center;
+  margin-top: 30px;
+  color: #999;
+  font-size: 13px;
+}
+</style></head><body>
+<div class='container'>
+<h1>Daily Backup Report</h1>
+<div class='subtitle'>Report Date: ${REPORT_DATE}</div>
 
-echo "<h1>Daily Backup Report - ${REPORT_DATE}</h1>"
-echo "<div style='padding: 15px; background-color: #f7f3fb; border-left: 5px solid #4B286D; margin-bottom: 20px;'>"
-echo "<p><strong>Executive Summary:</strong><br>"
-echo "<span style='color: #008000;'>Status: HIGH SUCCESS (${success_rate}%)</span> | Total Failures: ${error_count} | Total Storage: ${total_storage} GB</p>"
-echo "</div>"
+<div class='summary-box'>
+  <div class='summary-item'>
+    <span>${success_rate}%</span><label>Success Rate</label>
+  </div>
+  <div class='summary-item'>
+    <span>${error_count}</span><label>Failures</label>
+  </div>
+  <div class='summary-item'>
+    <span>${total_storage} GB</span><label>Total Storage</label>
+  </div>
+</div>
 
-echo "<table><tr><td class='chart-frame' style='width: 50%; text-align: center;'><img src='${DONUT_CHART_URL}' style='max-width: 100%; border-radius: 12px;'></td>"
-echo "<td class='chart-frame' style='width: 50%; text-align: center;'><img src='${BAR_CHART_URL}' style='max-width: 100%; border-radius: 12px;'></td></tr></table>"
+<div class='chart-row'>
+  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
+</div>
 
-echo "<h2>Top 5 Largest Backups</h2><table><tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
+<h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
+<table>
+<tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-    echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
+  echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
 done
-echo "</table>"
-
-echo "<div style='text-align: center; margin-top: 30px; color: #4B286D;'>Report generated by Database Engineering</div>"
-echo "</div></body></html>"
+echo "</table>
+<div class='footer'>Report generated automatically by <b>Database Engineering</b></div>
+</div></body></html>"
 } > "${emailFile}"
 
 # === SEND EMAIL ===
@@ -265,4 +351,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo " Email sent successfully to yvette.halili@telusinternational.com"
+echo "✅ Email sent successfully to yvette.halili@telusinternational.com"
