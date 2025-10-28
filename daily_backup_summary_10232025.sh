@@ -215,15 +215,23 @@ SELECT Server, DB_engine,
            CASE size_name
                WHEN 'B'  THEN size / 1024 / 1024
                WHEN 'KB' THEN size / 1024
-    WHEN 'MB' THEN size
-    WHEN 'GB' THEN size * 1024
-    ELSE 0
-  END
-), 2) AS TotalMB
+               WHEN 'MB' THEN size
+               WHEN 'GB' THEN size * 1024
+               ELSE 0
+           END
+       ), 2) AS TotalMB
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
-ORDER BY TotalMB DESC
+ORDER BY SUM(
+           CASE size_name
+               WHEN 'B'  THEN size / 1024 / 1024
+               WHEN 'KB' THEN size / 1024
+               WHEN 'MB' THEN size
+               WHEN 'GB' THEN size * 1024
+               ELSE 0
+           END
+       ) DESC
 LIMIT 5;
 ")
 
