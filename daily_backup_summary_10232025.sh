@@ -13,7 +13,7 @@ emailFile="${DIR}/daily_backup_report.html"
 # --- API Configuration ---
 QUICKCHART_API="https://quickchart.io/chart/create"
 
-# === HELPER FUNCTION: POST JSON and Get Short URL ===
+# === HELPER FUNCTION ===
 post_chart_json() {
     local json_payload="${1}"
     local width="${2:-350}"
@@ -27,7 +27,7 @@ post_chart_json() {
         | jq -r '.url')
     
     if [[ -z "$URL" || "$URL" == "null" ]]; then
-        echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+RENDER+FAILED"
+        echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+FAILED"
     else
         echo "$URL"
     fi
@@ -73,8 +73,7 @@ DATA=()
 COLORS=()
 
 while IFS=$'\t' read -r engine total; do
-  if [[ -z "$engine" ]]; then continue; fi
-  
+  [[ -z "$engine" ]] && continue
   LABELS+=("$engine")
   DATA+=("$total")
   case "$engine" in
@@ -91,7 +90,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === 1. DONUT CHART (with visible % labels) ===
+# === DONUT CHART ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -100,10 +99,13 @@ DONUT_CHART_JSON=$(cat <<EOF
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderWidth": 2
+      "hoverOffset": 10,
+      "borderWidth": 4,
+      "borderColor": "#ffffff"
     }]
   },
   "options": {
+    "cutout": "65%",
     "plugins": {
       "title": {
         "display": true,
@@ -116,13 +118,11 @@ DONUT_CHART_JSON=$(cat <<EOF
         "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
       },
       "datalabels": {
-        "display": true,
         "color": "#4B286D",
-        "font": { "weight": "bold", "size": 14 },
-        "formatter": "function(value, ctx) { var total = ctx.chart.data.datasets[0].data.reduce(function(a,b){return a+b},0); var percent = ((value/total)*100).toFixed(1)+'%'; return percent; }"
+        "font": { "size": 14, "weight": "bold" },
+        "formatter": "function(value, ctx) { var total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return ((value/total)*100).toFixed(1)+'%'; }"
       }
-    },
-    "cutout": "65%"
+    }
   },
   "plugins": ["chartjs-plugin-datalabels"]
 }
@@ -130,7 +130,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === 2. BAR CHART (with visible GB labels) ===
+# === BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -144,6 +144,7 @@ BAR_CHART_JSON=$(cat <<EOF
     }]
   },
   "options": {
+    "layout": { "padding": { "bottom": 30 } },
     "plugins": {
       "title": {
         "display": true,
@@ -151,15 +152,12 @@ BAR_CHART_JSON=$(cat <<EOF
         "color": "#4B286D",
         "font": { "size": 20, "weight": "bold" }
       },
-      "legend": { "display": false },
-      "datalabels": {
-        "anchor": "end",
-        "align": "top",
-        "offset": 4,
-        "color": "#4B286D",
-        "font": { "weight": "bold", "size": 12 },
-        "formatter": "function(value) { return value + ' GB'; }"
-      }
+      "legend": {
+        "display": true,
+        "position": "bottom",
+        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
+      },
+      "datalabels": { "display": false }
     },
     "scales": {
       "x": {
@@ -212,115 +210,35 @@ LIMIT 5;
 # === EMAIL HTML ===
 {
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-body {
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f5f4fb;
-  color: #333;
-  padding: 40px 0;
-}
-.container {
-  max-width: 850px;
-  margin: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%);
-  border-radius: 15px;
-  padding: 30px;
-  box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15);
-}
-h1 {
-  text-align: center;
-  color: #4B286D;
-  margin-bottom: 5px;
-}
-.subtitle {
-  text-align: center;
-  color: #777;
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-.summary-box {
-  display: flex;
-  justify-content: space-around;
-  background-color: #f7f3fb;
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 25px;
-  border-left: 6px solid #4B286D;
-}
-.summary-item {
-  text-align: center;
-}
-.summary-item span {
-  display: block;
-  font-size: 22px;
-  color: #4B286D;
-  font-weight: bold;
-}
-.summary-item label {
-  color: #666;
-  font-size: 13px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-}
-th {
-  background-color: #4B286D;
-  color: white;
-  padding: 10px;
-  text-align: left;
-}
-td {
-  padding: 10px;
-  border-bottom: 1px solid #eee;
-}
-tr:nth-child(even) {
-  background-color: #faf8ff;
-}
-.chart-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 10px;
-}
-.chart-frame {
-  flex: 1 1 45%;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-  padding: 10px;
-  text-align: center;
-}
-.footer {
-  text-align: center;
-  margin-top: 30px;
-  color: #999;
-  font-size: 13px;
-}
+body {font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f4fb; color: #333; padding: 40px 0;}
+.container {max-width: 850px; margin: auto; background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%); border-radius: 15px; padding: 30px; box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15);}
+h1 {text-align: center; color: #4B286D; margin-bottom: 5px;}
+.subtitle {text-align: center; color: #777; font-size: 14px; margin-bottom: 20px;}
+.summary-box {display: flex; justify-content: space-around; background-color: #f7f3fb; border-radius: 10px; padding: 15px; margin-bottom: 25px; border-left: 6px solid #4B286D;}
+.summary-item {text-align: center;}
+.summary-item span {display: block; font-size: 22px; color: #4B286D; font-weight: bold;}
+.summary-item label {color: #666; font-size: 13px;}
+table {width: 100%; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05);}
+th {background-color: #4B286D; color: white; padding: 10px; text-align: left;}
+td {padding: 10px; border-bottom: 1px solid #eee;}
+tr:nth-child(even) {background-color: #faf8ff;}
+.chart-row {display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 10px;}
+.chart-frame {flex: 1 1 45%; background: white; border-radius: 10px; box-shadow: 0 0 8px rgba(0,0,0,0.05); padding: 10px; text-align: center;}
+.footer {text-align: center; margin-top: 30px; color: #999; font-size: 13px;}
 </style></head><body>
 <div class='container'>
 <h1>Daily Backup Report</h1>
 <div class='subtitle'>Report Date: ${REPORT_DATE}</div>
 
 <div class='summary-box'>
-  <div class='summary-item'>
-    <span>${success_rate}%</span><label>Success Rate</label>
-  </div>
-  <div class='summary-item'>
-    <span>${error_count}</span><label>Failures</label>
-  </div>
-  <div class='summary-item'>
-    <span>${total_storage} GB</span><label>Total Storage</label>
-  </div>
+  <div class='summary-item'><span>${success_rate}%</span><label>Success Rate</label></div>
+  <div class='summary-item'><span>${error_count}</span><label>Failures</label></div>
+  <div class='summary-item'><span>${total_storage} GB</span><label>Total Storage</label></div>
 </div>
 
 <div class='chart-row'>
-  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
-  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;border-radius:15px;'></div>
+  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;border-radius:15px;'></div>
 </div>
 
 <h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
