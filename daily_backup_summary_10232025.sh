@@ -165,13 +165,13 @@ BAR_CHART_JSON=$(cat <<EOF
         "labels": {
           "color": "#4B286D",
           "font": { "weight": "bold" },
-          "padding": 20          // adds spacing between legend and chart
+          "padding": 50          // adds spacing between legend and chart
         }
       },
       "datalabels": {
         "anchor": "end",
         "align": "top",
-        "offset": 4,            // creates small spacing above bars
+        "offset": 8,            // creates small spacing above bars
         "color": "#4B286D",
         "font": { "weight": "bold", "size": 12 },
         "formatter": "(value) => value + ' GB'"
