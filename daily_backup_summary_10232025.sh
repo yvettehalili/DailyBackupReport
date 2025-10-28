@@ -25,7 +25,7 @@ post_chart_json() {
         -H "Content-Type: application/json" \
         -d "{ \"chart\": ${json_payload}, \"width\": ${width}, \"height\": ${height}, \"backgroundColor\": \"${background_color}\" }" \
         | jq -r '.url')
-    
+
     if [[ -z "$URL" || "$URL" == "null" ]]; then
         echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+RENDER+FAILED"
     else
@@ -46,7 +46,7 @@ error_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf 
 
 total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
-    WHEN 'B'  THEN size/1024/1024/1024
+    WHEN 'B' THEN size/1024/1024/1024
     WHEN 'KB' THEN size/1024/1024
     WHEN 'MB' THEN size/1024
     WHEN 'GB' THEN size
@@ -58,7 +58,7 @@ WHERE backup_date = '${REPORT_DATE}';
 # === BAR CHART DATA ===
 engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
-    WHEN 'B'  THEN size/1024/1024/1024
+    WHEN 'B' THEN size/1024/1024/1024
     WHEN 'KB' THEN size/1024/1024
     WHEN 'MB' THEN size/1024
     WHEN 'GB' THEN size
@@ -74,7 +74,6 @@ COLORS=()
 
 while IFS=$'\t' read -r engine total; do
   if [[ -z "$engine" ]]; then continue; fi
-  
   LABELS+=("$engine")
   DATA+=("$total")
   case "$engine" in
@@ -91,7 +90,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === 1. DONUT CHART (Working + Beautiful) ===
+# === DONUT CHART (Restored working version) ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -100,75 +99,68 @@ DONUT_CHART_JSON=$(cat <<EOF
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderColor": "#ffffff",
-      "borderWidth": 3,
-      "hoverOffset": 8
+      "borderWidth": 2
     }]
   },
   "options": {
-    "cutout": "65%",
+    "layout": {
+      "padding": { "top": 20, "bottom": 20 }
+    },
     "plugins": {
       "title": {
         "display": true,
         "text": "Backup Status Overview",
         "color": "#4B286D",
         "font": { "size": 18, "weight": "bold" },
-        "padding": { "bottom": 15 }
+        "padding": { "bottom": 20 }
       },
       "legend": {
         "position": "bottom",
-        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
-      },
-      "datalabels": {
-        "color": "#66CC33",
-        "font": { "size": 18, "weight": "bold" },
-        "formatter": "(value, ctx) => {
-          const dataArr = ctx.chart.data.datasets[0].data;
-          const total = dataArr.reduce((a, b) => a + b, 0);
-          const pct = ((value / total) * 100).toFixed(1) + '%';
-          return pct;
-        }"
+        "labels": {
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        }
       }
-    }
-  },
-  "plugins": ["chartjs-plugin-datalabels"]
+    },
+    "cutout": "65%"
+  }
 }
 EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === 2. BAR CHART (Top Labels + Bottom Legend, Fixed Overlap) ===
-BAR_CHART_JSON=$(cat <<'EOF'
+# === BAR CHART (Fixed label overlap) ===
+BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
   "data": {
-    "labels": __LABELS_JSON__,
+    "labels": ${LABELS_JSON},
     "datasets": [{
       "label": "Total Storage (GB)",
-      "data": __DATA_JSON__,
-      "backgroundColor": __COLORS_JSON__,
-      "borderRadius": 12,
-      "borderSkipped": false
+      "data": ${DATA_JSON},
+      "backgroundColor": ${COLORS_JSON},
+      "borderRadius": 10
     }]
   },
   "options": {
-    "layout": { "padding": { "top": 40, "bottom": 50 } },
+    "layout": {
+      "padding": { "top": 60, "bottom": 30 }
+    },
     "plugins": {
       "title": {
         "display": true,
         "text": "Daily Backup Storage by DB Engine",
         "color": "#4B286D",
         "font": { "size": 20, "weight": "bold" },
-        "padding": { "bottom": 25 }
+        "padding": { "bottom": 30 }
       },
       "legend": {
         "display": true,
         "position": "bottom",
-        "align": "center",
         "labels": {
           "color": "#4B286D",
           "font": { "weight": "bold" },
-          "padding": 30
+          "padding": 20
         }
       },
       "datalabels": {
@@ -182,7 +174,10 @@ BAR_CHART_JSON=$(cat <<'EOF'
     },
     "scales": {
       "x": {
-        "ticks": { "color": "#4B286D", "font": { "weight": "bold" } },
+        "ticks": {
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
         "grid": { "display": false }
       },
       "y": {
@@ -197,36 +192,34 @@ BAR_CHART_JSON=$(cat <<'EOF'
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
     }
-  },
-  "plugins": ["chartjs-plugin-datalabels"]
+  }
 }
 EOF
 )
-BAR_CHART_JSON="${BAR_CHART_JSON/__LABELS_JSON__/${LABELS_JSON}}"
-BAR_CHART_JSON="${BAR_CHART_JSON/__DATA_JSON__/${DATA_JSON}}"
-BAR_CHART_JSON="${BAR_CHART_JSON/__COLORS_JSON__/${COLORS_JSON}}"
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
   CASE size_name
-    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'B' THEN size / 1024 / 1024
     WHEN 'KB' THEN size / 1024
     WHEN 'MB' THEN size
     WHEN 'GB' THEN size * 1024
-    ELSE 0 END
+    ELSE 0
+  END
 ), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
 ORDER BY SUM(
   CASE size_name
-    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'B' THEN size / 1024 / 1024
     WHEN 'KB' THEN size / 1024
     WHEN 'MB' THEN size
     WHEN 'GB' THEN size * 1024
-    ELSE 0 END
+    ELSE 0
+  END
 ) DESC
 LIMIT 5;
 ")
@@ -234,95 +227,21 @@ LIMIT 5;
 # === EMAIL HTML ===
 {
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-body {
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f5f4fb;
-  color: #333;
-  padding: 40px 0;
-}
-.container {
-  max-width: 850px;
-  margin: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%);
-  border-radius: 15px;
-  padding: 30px;
-  box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15);
-}
-h1 {
-  text-align: center;
-  color: #4B286D;
-  margin-bottom: 5px;
-}
-.subtitle {
-  text-align: center;
-  color: #777;
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-.summary-box {
-  display: flex;
-  justify-content: space-around;
-  background-color: #f7f3fb;
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 25px;
-  border-left: 6px solid #4B286D;
-}
-.summary-item {
-  text-align: center;
-}
-.summary-item span {
-  display: block;
-  font-size: 22px;
-  color: #4B286D;
-  font-weight: bold;
-}
-.summary-item label {
-  color: #666;
-  font-size: 13px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-}
-th {
-  background-color: #4B286D;
-  color: white;
-  padding: 10px;
-  text-align: left;
-}
-td {
-  padding: 10px;
-  border-bottom: 1px solid #eee;
-}
-tr:nth-child(even) {
-  background-color: #faf8ff;
-}
-.chart-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 10px;
-}
-.chart-frame {
-  flex: 1 1 45%;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
-  padding: 10px;
-  text-align: center;
-}
-.footer {
-  text-align: center;
-  margin-top: 30px;
-  color: #999;
-  font-size: 13px;
-}
+body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f4fb; color: #333; padding: 40px 0; }
+.container { max-width: 850px; margin: auto; background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%); border-radius: 15px; padding: 30px; box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15); }
+h1 { text-align: center; color: #4B286D; margin-bottom: 5px; }
+.subtitle { text-align: center; color: #777; font-size: 14px; margin-bottom: 20px; }
+.summary-box { display: flex; justify-content: space-around; background-color: #f7f3fb; border-radius: 10px; padding: 15px; margin-bottom: 25px; border-left: 6px solid #4B286D; }
+.summary-item { text-align: center; }
+.summary-item span { display: block; font-size: 22px; color: #4B286D; font-weight: bold; }
+.summary-item label { color: #666; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05); }
+th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
+td { padding: 10px; border-bottom: 1px solid #eee; color: #4B286D; font-size: 14px; }
+tr:nth-child(even) { background-color: #faf8ff; }
+.chart-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 10px; }
+.chart-frame { flex: 1 1 45%; background: white; border-radius: 10px; box-shadow: 0 0 8px rgba(0,0,0,0.05); padding: 10px; text-align: center; }
+.footer { text-align: center; margin-top: 30px; color: #999; font-size: 13px; }
 </style></head><body>
 <div class='container'>
 <h1>Daily Backup Report</h1>
@@ -349,9 +268,11 @@ tr:nth-child(even) {
 <table>
 <tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-  echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
+  size_gb=$(awk "BEGIN {printf \"%.2f\", ${size%% *} / 1024}")
+  echo "<tr><td>${server}</td><td>${engine}</td><td>${size_gb} GB</td></tr>"
 done
 echo "</table>
+
 <div class='footer'>Report generated automatically by <b>Database Engineering</b></div>
 </div></body></html>"
 } > "${emailFile}"
@@ -367,5 +288,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo "✅ Email sent successfully to yvette.halili@telusinternational.com"
-
+echo "Email sent successfully to yvette.halili@telusinternational.com"
