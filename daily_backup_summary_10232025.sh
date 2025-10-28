@@ -114,10 +114,13 @@ DONUT_CHART_JSON=$(jq -n \
       plugins: {
         legend: {
           position: "bottom",
-          labels: { color: "#4B286D", font: { size: 14, weight: "bold" } }
+          labels: {
+            color: "#4B286D",
+            font: { size: 14, weight: "bold" }
+          }
         },
         datalabels: {
-          color: "#00A676",     # TELUS green
+          color: "#00A676",
           font: { size: 20, weight: "bold" },
           formatter: "(value, ctx) => {
             const dataset = ctx.chart.data.datasets[0].data;
@@ -137,7 +140,7 @@ DONUT_CHART_JSON=$(jq -n \
     }
   }')
 
-# === BAR CHART CONFIG ===
+# === BAR CHART CONFIG (Fixed formatter syntax) ===
 BAR_CHART_JSON=$(jq -n \
   --argjson labels "$LABELS_JSON" \
   --argjson data "$DATA_JSON" \
@@ -156,17 +159,10 @@ BAR_CHART_JSON=$(jq -n \
       }]
     },
     options: {
-      layout: {
-        padding: { top: 40, bottom: 40 }
-      },
+      layout: { padding: { top: 40, bottom: 40 } },
       scales: {
-        y: {
-          beginAtZero: true,
-          grid: { color: "#eee" }
-        },
-        x: {
-          grid: { display: false }
-        }
+        y: { beginAtZero: true, grid: { color: "#eee" } },
+        x: { grid: { display: false } }
       },
       plugins: {
         legend: {
@@ -194,11 +190,9 @@ BAR_CHART_JSON=$(jq -n \
     }
   }')
 
-
 # === CHART URL GENERATION ===
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 350 350 white)
-
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
@@ -268,8 +262,14 @@ tr:nth-child(odd) td { background-color: #ffffff; }
 </div>
 
 <div class='chart-row'>
-  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
-  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'>
+    <h3 style='color:#4B286D; font-weight:bold; margin-bottom:10px;'>Backup Success Rate</h3>
+    <img src='${DONUT_CHART_URL}' style='max-width:100%;'>
+  </div>
+  <div class='chart-frame'>
+    <h3 style='color:#4B286D; font-weight:bold; margin-bottom:10px;'>Total Storage per Database Type</h3>
+    <img src='${BAR_CHART_URL}' style='max-width:100%;'>
+  </div>
 </div>
 
 <h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
