@@ -114,10 +114,7 @@ DONUT_CHART_JSON=$(jq -n \
       plugins: {
         legend: {
           position: "bottom",
-          labels: {
-            color: "#4B286D",
-            font: { size: 14, weight: "bold" }
-          }
+          labels: { color: "#4B286D", font: { size: 14, weight: "bold" } }
         },
         datalabels: {
           color: "#00A676",
@@ -140,7 +137,7 @@ DONUT_CHART_JSON=$(jq -n \
     }
   }')
 
-# === BAR CHART CONFIG (Fixed formatter syntax) ===
+# === BAR CHART CONFIG ===
 BAR_CHART_JSON=$(jq -n \
   --argjson labels "$LABELS_JSON" \
   --argjson data "$DATA_JSON" \
@@ -154,8 +151,8 @@ BAR_CHART_JSON=$(jq -n \
         data: $data,
         backgroundColor: $colors,
         borderRadius: 10,
-        borderWidth: 2,
-        borderColor: "#ffffff"
+        borderColor: "#ffffff",
+        borderWidth: 2
       }]
     },
     options: {
@@ -167,17 +164,14 @@ BAR_CHART_JSON=$(jq -n \
       plugins: {
         legend: {
           position: "bottom",
-          labels: {
-            color: "#4B286D",
-            font: { size: 14, weight: "bold" }
-          }
+          labels: { color: "#4B286D", font: { size: 14, weight: "bold" } }
         },
         datalabels: {
           anchor: "end",
           align: "end",
           color: "#4B286D",
           font: { weight: "bold", size: 14 },
-          formatter: "(value) => value.toFixed(1) + \\\" GB\\\""
+          formatter: "(value) => value.toFixed(1)"
         },
         title: {
           display: true,
@@ -193,6 +187,7 @@ BAR_CHART_JSON=$(jq -n \
 # === CHART URL GENERATION ===
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 350 350 white)
+
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
@@ -232,13 +227,7 @@ h1 { text-align: center; color: #4B286D; margin-bottom: 5px; }
 .summary-item label { color: #666; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05); }
 th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
-td {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-  border-right: 1px solid #eee;
-  color: #444444;
-  font-size: 14px;
-}
+td { padding: 10px; border-bottom: 1px solid #ddd; border-right: 1px solid #eee; color: #444; font-size: 14px; }
 tr:nth-child(even) td { background-color: #f9f7fc; }
 tr:nth-child(odd) td { background-color: #ffffff; }
 .chart-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 10px; }
@@ -262,14 +251,8 @@ tr:nth-child(odd) td { background-color: #ffffff; }
 </div>
 
 <div class='chart-row'>
-  <div class='chart-frame'>
-    <h3 style='color:#4B286D; font-weight:bold; margin-bottom:10px;'>Backup Success Rate</h3>
-    <img src='${DONUT_CHART_URL}' style='max-width:100%;'>
-  </div>
-  <div class='chart-frame'>
-    <h3 style='color:#4B286D; font-weight:bold; margin-bottom:10px;'>Total Storage per Database Type</h3>
-    <img src='${BAR_CHART_URL}' style='max-width:100%;'>
-  </div>
+  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
 </div>
 
 <h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
@@ -295,4 +278,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo "Email sent successfully to yvette.halili@telusinternational.com"
+echo "✅ Email sent successfully to yvette.halili@telusinternational.com"
