@@ -13,7 +13,7 @@ emailFile="${DIR}/daily_backup_report.html"
 # --- API Configuration ---
 QUICKCHART_API="https://quickchart.io/chart/create"
 
-# === HELPER FUNCTION ===
+# === HELPER FUNCTION: POST JSON and Get Short URL ===
 post_chart_json() {
     local json_payload="${1}"
     local width="${2:-350}"
@@ -25,7 +25,7 @@ post_chart_json() {
         -H "Content-Type: application/json" \
         -d "{ \"chart\": ${json_payload}, \"width\": ${width}, \"height\": ${height}, \"backgroundColor\": \"${background_color}\" }" \
         | jq -r '.url')
-
+    
     if [[ -z "$URL" || "$URL" == "null" ]]; then
         echo "https://via.placeholder.com/${width}x${height}.png/CC0000/FFFFFF?text=CHART+RENDER+FAILED"
     else
@@ -73,7 +73,8 @@ DATA=()
 COLORS=()
 
 while IFS=$'\t' read -r engine total; do
-  [[ -z "$engine" ]] && continue
+  if [[ -z "$engine" ]]; then continue; fi
+  
   LABELS+=("$engine")
   DATA+=("$total")
   case "$engine" in
@@ -90,7 +91,7 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === DONUT CHART ===
+# === 1. DONUT CHART ===
 DONUT_CHART_JSON=$(cat <<EOF
 {
   "type": "doughnut",
@@ -114,7 +115,7 @@ EOF
 )
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === BAR CHART ===
+# === 2. BAR CHART ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -129,23 +130,28 @@ BAR_CHART_JSON=$(cat <<EOF
   },
   "options": {
     "plugins": {
-      "title": { "display": true, "text": "Total Backup Sizes by Database Type", "color": "#4B286D", "font": { "size": 18, "weight": "bold" } },
-      "legend": { "display": false },
-      "datalabels": {
+      "title": {
         "display": true,
-        "color": "#222",
-        "anchor": "end",
-        "align": "top",
-        "font": { "weight": "bold", "size": 12 },
-        "formatter": "function(value) { return value + ' GB'; }"
-      }
+        "text": "Daily Backup Storage by DB Engine",
+        "color": "#4B286D",
+        "font": { "size": 20, "weight": "bold" }
+      },
+      "legend": { "display": false }
     },
     "scales": {
-      "x": { "ticks": { "color": "#4B286D", "font": { "weight": "bold" } }, "grid": { "display": false } },
+      "x": {
+        "ticks": { "color": "#4B286D", "font": { "weight": "bold" } },
+        "grid": { "display": false }
+      },
       "y": {
         "beginAtZero": true,
-        "title": { "display": true, "text": "Storage (GB)", "color": "#4B286D", "font": { "weight": "bold" } },
-        "ticks": { "color": "#333" },
+        "title": {
+          "display": true,
+          "text": "Storage (GB)",
+          "color": "#4B286D",
+          "font": { "weight": "bold" }
+        },
+        "ticks": { "color": "#333333" },
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
     }
@@ -155,25 +161,25 @@ EOF
 )
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
-# === TOP 5 BACKUPS (in GB) ===
+# === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
   CASE size_name
-    WHEN 'B'  THEN size / 1024 / 1024 / 1024
-    WHEN 'KB' THEN size / 1024 / 1024
-    WHEN 'MB' THEN size / 1024
-    WHEN 'GB' THEN size
+    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
     ELSE 0 END
-), 2), ' GB') AS TotalSize
+), 2), ' MB') AS TotalSize
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}'
 GROUP BY Server, DB_engine
 ORDER BY SUM(
   CASE size_name
-    WHEN 'B'  THEN size / 1024 / 1024 / 1024
-    WHEN 'KB' THEN size / 1024 / 1024
-    WHEN 'MB' THEN size / 1024
-    WHEN 'GB' THEN size
+    WHEN 'B'  THEN size / 1024 / 1024
+    WHEN 'KB' THEN size / 1024
+    WHEN 'MB' THEN size
+    WHEN 'GB' THEN size * 1024
     ELSE 0 END
 ) DESC
 LIMIT 5;
@@ -181,137 +187,127 @@ LIMIT 5;
 
 # === EMAIL HTML ===
 {
-cat <<EOF
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
+echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
 body {
-  font-family: 'Segoe UI', Arial, sans-serif;
-  background-color: #f8f8fc;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f5f4fb;
   color: #333;
-  padding: 20px;
+  padding: 40px 0;
 }
 .container {
-  max-width: 900px;
+  max-width: 850px;
   margin: auto;
-  background-color: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%);
+  border-radius: 15px;
   padding: 30px;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15);
 }
-h1, h2, h3 {
-  color: #4B286D;
+h1 {
   text-align: center;
-}
-.summary {
-  background-color: #f4effc;
-  border-left: 6px solid #4B286D;
-  padding: 20px;
-  border-radius: 10px;
-  margin: 20px 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.summary p {
-  margin: 6px 0;
-  font-size: 15px;
-  color: #333;
-}
-.summary span.label {
-  font-weight: bold;
   color: #4B286D;
-  width: 130px;
-  display: inline-block;
+  margin-bottom: 5px;
 }
-.chart-table-container {
+.subtitle {
+  text-align: center;
+  color: #777;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.summary-box {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  margin-top: 20px;
-}
-.chart-box {
-  flex: 1;
-  background-color: #fff;
-  border: 1px solid #e0d6f0;
-  border-radius: 12px;
+  justify-content: space-around;
+  background-color: #f7f3fb;
+  border-radius: 10px;
   padding: 15px;
-  box-shadow: 0 2px 10px rgba(75,40,109,0.08);
+  margin-bottom: 25px;
+  border-left: 6px solid #4B286D;
+}
+.summary-item {
   text-align: center;
 }
-.table-box {
-  width: 100%;
-  margin-top: 25px;
-  border: 1px solid #e0d6f0;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 10px rgba(75,40,109,0.08);
+.summary-item span {
+  display: block;
+  font-size: 22px;
+  color: #4B286D;
+  font-weight: bold;
+}
+.summary-item label {
+  color: #666;
+  font-size: 13px;
 }
 table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
 }
 th {
   background-color: #4B286D;
   color: white;
   padding: 10px;
-  font-weight: 600;
-  font-size: 14px;
+  text-align: left;
 }
 td {
-  padding: 8px;
-  text-align: left;
-  font-size: 13.5px;
-  color: #4B286D;
+  padding: 10px;
   border-bottom: 1px solid #eee;
 }
-tr:nth-child(even) { background-color: #faf8ff; }
+tr:nth-child(even) {
+  background-color: #faf8ff;
+}
+.chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 10px;
+}
+.chart-frame {
+  flex: 1 1 45%;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  padding: 10px;
+  text-align: center;
+}
 .footer {
   text-align: center;
-  color: #888;
-  font-size: 13px;
   margin-top: 30px;
+  color: #999;
+  font-size: 13px;
 }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Daily Backup Report - ${REPORT_DATE}</h1>
+</style></head><body>
+<div class='container'>
+<h1>Daily Backup Report</h1>
+<div class='subtitle'>Report Date: ${REPORT_DATE}</div>
 
-  <div class="summary">
-    <h3>Backup Summary</h3>
-    <p><span class="label">Total Storage:</span> ${total_storage} GB</p>
-    <p><span class="label">Failures:</span> ${error_count}</p>
-    <p><span class="label">Success Rate:</span> ${success_rate}%</p>
+<div class='summary-box'>
+  <div class='summary-item'>
+    <span>${success_rate}%</span><label>Success Rate</label>
   </div>
-
-  <div class="chart-table-container">
-    <div class="chart-box"><img src="${DONUT_CHART_URL}" style="max-width:100%;"></div>
-    <div class="chart-box"><img src="${BAR_CHART_URL}" style="max-width:100%;"></div>
+  <div class='summary-item'>
+    <span>${error_count}</span><label>Failures</label>
   </div>
-
-  <div class="table-box">
-    <h3>Top 5 Largest Backups</h3>
-    <table>
-      <tr><th>Server</th><th>Database Engine</th><th>Size (GB)</th></tr>
-EOF
-
-echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
-    echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
-done
-
-cat <<EOF
-    </table>
-  </div>
-
-  <div class="footer">
-    Report generated by Database Engineering
+  <div class='summary-item'>
+    <span>${total_storage} GB</span><label>Total Storage</label>
   </div>
 </div>
-</body>
-</html>
-EOF
+
+<div class='chart-row'>
+  <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
+  <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
+</div>
+
+<h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
+<table>
+<tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
+echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
+  echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
+done
+echo "</table>
+<div class='footer'>Report generated automatically by <b>Database Engineering</b></div>
+</div></body></html>"
 } > "${emailFile}"
 
 # === SEND EMAIL ===
@@ -325,4 +321,4 @@ echo ""
 cat "${emailFile}"
 } | /usr/sbin/sendmail -t
 
-echo "Email sent successfully to yvette.halili@telusinternational.com"
+echo " Email sent successfully to yvette.halili@telusinternational.com"
