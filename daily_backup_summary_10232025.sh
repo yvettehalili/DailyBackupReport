@@ -204,7 +204,6 @@ BAR_CHART_JSON=$(cat <<EOF
 EOF
 )
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
-
 # === TOP 5 AGGREGATED BACKUPS ===
 top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
@@ -229,7 +228,6 @@ ORDER BY SUM(
   END
 ) DESC
 LIMIT 5;
-")
 ")
 
 # === EMAIL HTML ===
