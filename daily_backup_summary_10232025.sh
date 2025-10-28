@@ -90,110 +90,109 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === DONUT CHART ===
-DONUT_CHART_JSON=$(cat <<EOF
-{
-  "type": "doughnut",
-  "data": {
-    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
-    "datasets": [{
-      "data": [${success_count}, ${error_count}],
-      "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderWidth": 2
-    }]
-  },
-  "options": {
-    "layout": {
-      "padding": { "top": 20, "bottom": 20 }
+# === DONUT CHART CONFIG ===
+DONUT_CHART_JSON=$(jq -n \
+  --arg success_rate "$success_rate" \
+  --arg error_rate "$error_rate" \
+  --argjson success_count "$success_count" \
+  --argjson error_count "$error_count" \
+  '{
+    type: "doughnut",
+    data: {
+      labels: ["Success (\($success_rate)%)", "Failure (\($error_rate)%)"],
+      datasets: [{
+        data: [$success_count, $error_count],
+        backgroundColor: ["#4B286D", "#00A6A6"],
+        borderColor: "#ffffff",
+        borderWidth: 3,
+        hoverOffset: 8
+      }]
     },
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Backup Status Overview",
-        "color": "#4B286D",
-        "font": { "size": 18, "weight": "bold" },
-        "padding": { "bottom": 20 }
+    options: {
+      cutout: "70%",
+      layout: { padding: 20 },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color: "#4B286D", font: { size: 14, weight: "bold" } }
+        },
+        datalabels: {
+          color: "#00A676",     # TELUS green
+          font: { size: 20, weight: "bold" },
+          formatter: "(value, ctx) => {
+            const dataset = ctx.chart.data.datasets[0].data;
+            const total = dataset.reduce((a,b) => a + b, 0);
+            const percentage = Math.round((value / total) * 100);
+            return percentage + '%';
+          }"
+        },
+        title: {
+          display: true,
+          text: "Backup Success Rate",
+          color: "#4B286D",
+          font: { size: 18, weight: "bold" },
+          padding: { bottom: 10 }
+        }
+      }
+    }
+  }')
+
+# === BAR CHART CONFIG ===
+BAR_CHART_JSON=$(jq -n \
+  --argjson labels "$LABELS_JSON" \
+  --argjson data "$DATA_JSON" \
+  --argjson colors "$COLORS_JSON" \
+  '{
+    type: "bar",
+    data: {
+      labels: $labels,
+      datasets: [{
+        label: "Total Storage (GB)",
+        data: $data,
+        backgroundColor: $colors,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: "#ffffff"
+      }]
+    },
+    options: {
+      layout: {
+        padding: { top: 40, bottom: 40 }
       },
-      "legend": {
-        "position": "bottom",
-        "labels": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: "#eee" }
+        },
+        x: {
+          grid: { display: false }
         }
       },
-      "datalabels": {
-        "color": "#ffffff",
-        "font": { "size": 16, "weight": "bold" }
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#4B286D",
+            font: { size: 14, weight: "bold" }
+          }
+        },
+        datalabels: {
+          anchor: "end",
+          align: "end",
+          color: "#4B286D",
+          font: { weight: "bold", size: 14 },
+          formatter: "(value) => value.toFixed(1) + ' GB'"
+        },
+        title: {
+          display: true,
+          text: "Total Storage per Database Type",
+          color: "#4B286D",
+          font: { size: 18, weight: "bold" },
+          padding: { bottom: 10 }
+        }
       }
     }
-  }
-}
-EOF
-)
-
-# === BAR CHART (Clean Non-Overlapping Layout) ===
-BAR_CHART_JSON=$(cat <<EOF
-{
-  "type": "bar",
-  "data": {
-    "labels": ${LABELS_JSON},
-    "datasets": [{
-      "label": "Total Storage (GB)",
-      "data": ${DATA_JSON},
-      "backgroundColor": ${COLORS_JSON},
-      "borderRadius": 10
-    }]
-  },
-  "options": {
-    "layout": {
-      "padding": { "top": 60, "bottom": 30 }   // Increased top padding for cleaner spacing
-    },
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Total Storage (GB)",
-        "color": "#4B286D",
-        "font": { "size": 20, "weight": "bold" },
-        "padding": { "bottom": 30 }             // Added more bottom padding under title
-      },
-      "legend": {
-        "display": false
-      },
-      "datalabels": {
-        "anchor": "end",
-        "align": "top",
-        "offset": 4,                            // Slightly smaller offset for balance
-        "clip": false,
-        "color": "#4B286D",
-        "font": { "weight": "bold", "size": 13 },
-        "formatter": "(value) => value + ' GB'"
-      }
-    },
-    "scales": {
-      "x": {
-        "ticks": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        },
-        "grid": { "display": false }
-      },
-      "y": {
-        "beginAtZero": true,
-        "title": {
-          "display": true,
-          "text": "Storage (GB)",
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        },
-        "ticks": { "color": "#333333" },
-        "grid": { "color": "rgba(200,200,200,0.2)" }
-      }
-    }
-  }
-}
-EOF
-)
-
+  }')
 
 
 # === CHART URL GENERATION ===
