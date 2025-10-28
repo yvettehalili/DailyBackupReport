@@ -105,28 +105,21 @@ DONUT_CHART_JSON=$(cat <<EOF
   },
   "options": {
     "plugins": {
-      "title": { 
-        "display": true, 
-        "text": "Backup Status Overview", 
-        "color": "#4B286D", 
-        "font": { "size": 18, "weight": "bold" } 
+      "title": {
+        "display": true,
+        "text": "Backup Status Overview",
+        "color": "#4B286D",
+        "font": { "size": 18, "weight": "bold" }
       },
-      "legend": { 
-        "position": "bottom", 
-        "labels": { 
-          "color": "#4B286D", 
-          "font": { "weight": "bold" } 
-        } 
+      "legend": {
+        "position": "bottom",
+        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
       },
       "datalabels": {
         "display": true,
-        "color": "#ffffff",
+        "color": "#4B286D",
         "font": { "weight": "bold", "size": 14 },
-        "formatter": (value, ctx) => {
-          const total = ctx.chart.data.datasets[0].data.reduce((a,b) => a + b, 0);
-          const percent = ((value / total) * 100).toFixed(1) + '%';
-          return percent;
-        }
+        "formatter": "function(value, ctx) { var total = ctx.chart.data.datasets[0].data.reduce(function(a,b){return a+b},0); var percent = ((value/total)*100).toFixed(1)+'%'; return percent; }"
       }
     },
     "cutout": "65%"
@@ -162,9 +155,10 @@ BAR_CHART_JSON=$(cat <<EOF
       "datalabels": {
         "anchor": "end",
         "align": "top",
+        "offset": 4,
         "color": "#4B286D",
         "font": { "weight": "bold", "size": 12 },
-        "formatter": (value) => value + " GB"
+        "formatter": "function(value) { return value + ' GB'; }"
       }
     },
     "scales": {
