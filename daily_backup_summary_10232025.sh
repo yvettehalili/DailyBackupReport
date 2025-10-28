@@ -137,7 +137,7 @@ DONUT_CHART_JSON=$(jq -n \
     }
   }')
 
-# === BAR CHART CONFIG (Title moved to bottom) ===
+# === BAR CHART CONFIG (Title above but spaced properly) ===
 BAR_CHART_JSON=$(jq -n \
   --argjson LABELS "$LABELS_JSON" \
   --argjson DATA "$DATA_JSON" \
@@ -156,7 +156,7 @@ BAR_CHART_JSON=$(jq -n \
       }]
     },
     options: {
-      layout: { padding: { top: 30, bottom: 60 } },
+      layout: { padding: { top: 50, bottom: 30 } },
       scales: {
         y: { beginAtZero: true, grid: { color: "#EDE7F6" } },
         x: { grid: { display: false } }
@@ -173,10 +173,10 @@ BAR_CHART_JSON=$(jq -n \
         title: {
           display: true,
           text: "Total Storage (GB)",
-          position: "bottom",
+          position: "top",
           color: "#4B286D",
           font: { size: 16, weight: "bold" },
-          padding: { top: 10 }
+          padding: { bottom: 10 }
         }
       }
     }
