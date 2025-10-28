@@ -116,15 +116,9 @@ DONUT_CHART_JSON=$(cat <<EOF
       "legend": {
         "position": "bottom",
         "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
-      },
-      "datalabels": {
-        "color": "#4B286D",
-        "font": { "size": 14, "weight": "bold" },
-        "formatter": "function(value, ctx) { var total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return ((value/total)*100).toFixed(1)+'%'; }"
       }
     }
-  },
-  "plugins": ["chartjs-plugin-datalabels"]
+  }
 }
 EOF
 )
@@ -157,7 +151,13 @@ BAR_CHART_JSON=$(cat <<EOF
         "position": "bottom",
         "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
       },
-      "datalabels": { "display": false }
+      "datalabels": {
+        "anchor": "end",
+        "align": "top",
+        "color": "#4B286D",
+        "font": { "weight": "bold", "size": 12 },
+        "formatter": "(value) => value + ' GB'"
+      }
     },
     "scales": {
       "x": {
