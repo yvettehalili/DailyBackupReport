@@ -10,6 +10,9 @@ DIR="backup"
 mkdir -p "${DIR}"
 emailFile="${DIR}/daily_backup_report.html"
 
+# Avoid MySQL password warning
+export MYSQL_PWD="${DB_PASS}"
+
 # --- API Configuration ---
 QUICKCHART_API="https://quickchart.io/chart/create"
 
@@ -34,7 +37,7 @@ post_chart_json() {
 }
 
 # === EXECUTIVE METRICS ===
-read total_count error_count <<< $(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
+read total_count error_count <<< $(mysql -u"${DB_USER}" -D"${DB_NAME}" -N -e "
 SELECT COUNT(*), SUM(IF(size = 0.00 AND size_name = 'B', 1, 0))
 FROM daily_backup_report
 WHERE backup_date = '${REPORT_DATE}';
@@ -44,7 +47,7 @@ success_count=$((total_count - error_count))
 success_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${success_count}/${total_count})*100}}")
 error_rate=$(awk "BEGIN {if (${total_count} == 0) {printf \"0.0\"} else {printf \"%.1f\", (${error_count}/${total_count})*100}}")
 
-total_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
+total_storage=$(mysql -u"${DB_USER}" -D"${DB_NAME}" -N -e "
 SELECT ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
     WHEN 'KB' THEN size/1024/1024
@@ -56,7 +59,7 @@ WHERE backup_date = '${REPORT_DATE}';
 ")
 
 # === BAR CHART DATA ===
-engine_storage=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -N -e "
+engine_storage=$(mysql -u"${DB_USER}" -D"${DB_NAME}" -N -e "
 SELECT DB_engine, ROUND(SUM(CASE size_name
     WHEN 'B' THEN size/1024/1024/1024
     WHEN 'KB' THEN size/1024/1024
@@ -99,12 +102,12 @@ DONUT_CHART_JSON=$(cat <<EOF
     "datasets": [{
       "data": [${success_count}, ${error_count}],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "borderWidth": 4,
-      "borderColor": "#ffffff",
-      "hoverOffset": 8
+      "borderWidth": 3,
+      "borderColor": "#ffffff"
     }]
   },
   "options": {
+    "cutout": "65%",
     "layout": { "padding": { "top": 20, "bottom": 20 } },
     "plugins": {
       "title": {
@@ -112,27 +115,30 @@ DONUT_CHART_JSON=$(cat <<EOF
         "text": "Backup Status Overview",
         "color": "#4B286D",
         "font": { "size": 18, "weight": "bold" },
-        "padding": { "bottom": 20 }
+        "padding": { "bottom": 15 }
       },
       "legend": {
         "position": "bottom",
-        "labels": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" }
-        }
+        "labels": { "color": "#4B286D", "font": { "weight": "bold" } }
       },
       "datalabels": {
-        "color": "#4B286D",
-        "font": { "size": 16, "weight": "bold" }
+        "color": "#66CC33",
+        "font": { "size": 18, "weight": "bold" },
+        "formatter": "(value, ctx) => {
+          const dataArr = ctx.chart.data.datasets[0].data;
+          const total = dataArr.reduce((a, b) => a + b, 0);
+          const pct = ((value / total) * 100).toFixed(1) + '%';
+          return pct;
+        }"
       }
-    },
-    "cutout": "65%"
-  }
+    }
+  },
+  "plugins": ["chartjs-plugin-datalabels"]
 }
 EOF
 )
 
-# === BAR CHART (Fixed Layout) ===
+# === BAR CHART (Title clear + padding fix) ===
 BAR_CHART_JSON=$(cat <<EOF
 {
   "type": "bar",
@@ -146,9 +152,7 @@ BAR_CHART_JSON=$(cat <<EOF
     }]
   },
   "options": {
-    "layout": {
-      "padding": { "top": 60, "bottom": 30 }
-    },
+    "layout": { "padding": { "top": 80, "bottom": 40 } },
     "plugins": {
       "title": {
         "display": true,
@@ -157,7 +161,9 @@ BAR_CHART_JSON=$(cat <<EOF
         "font": { "size": 20, "weight": "bold" },
         "padding": { "bottom": 20 }
       },
-      "legend": { "display": false },
+      "legend": {
+        "display": false
+      },
       "datalabels": {
         "anchor": "end",
         "align": "top",
@@ -188,17 +194,18 @@ BAR_CHART_JSON=$(cat <<EOF
         "grid": { "color": "rgba(200,200,200,0.2)" }
       }
     }
-  }
+  },
+  "plugins": ["chartjs-plugin-datalabels"]
 }
 EOF
 )
 
 # === CHART URL GENERATION ===
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
-BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 450 350 white)
+BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 350 350 white)
 
 # === TOP 5 AGGREGATED BACKUPS ===
-top_backups=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -D"${DB_NAME}" -e "
+top_backups=$(mysql -u"${DB_USER}" -D"${DB_NAME}" -e "
 SELECT Server, DB_engine, CONCAT(ROUND(SUM(
   CASE size_name
     WHEN 'B'  THEN size / 1024 / 1024
@@ -225,7 +232,9 @@ LIMIT 5;
 
 # === EMAIL HTML ===
 {
-echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
+cat <<EOF
+<!DOCTYPE html>
+<html><head><meta charset='UTF-8'><style>
 body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f4fb; color: #333; padding: 40px 0; }
 .container { max-width: 850px; margin: auto; background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%); border-radius: 15px; padding: 30px; box-shadow: 0 6px 18px rgba(75, 40, 109, 0.15); }
 h1 { text-align: center; color: #4B286D; margin-bottom: 5px; }
@@ -234,39 +243,39 @@ h1 { text-align: center; color: #4B286D; margin-bottom: 5px; }
 .summary-item { text-align: center; }
 .summary-item span { display: block; font-size: 22px; color: #4B286D; font-weight: bold; }
 .summary-item label { color: #666; font-size: 13px; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05); }
-th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
-td { padding: 10px; border-bottom: 1px solid #ddd; border-right: 1px solid #eee; color: #444444; font-size: 14px; }
-tr:nth-child(even) td { background-color: #f9f7fc; }
-tr:nth-child(odd) td { background-color: #ffffff; }
 .chart-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 10px; }
 .chart-frame { flex: 1 1 45%; background: white; border-radius: 10px; box-shadow: 0 0 8px rgba(0,0,0,0.05); padding: 10px; text-align: center; }
 .footer { text-align: center; margin-top: 30px; color: #999; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 8px rgba(0,0,0,0.05); }
+th { background-color: #4B286D; color: white; padding: 10px; text-align: left; }
+td { padding: 10px; border-bottom: 1px solid #ddd; border-right: 1px solid #eee; color: #444; font-size: 14px; }
+tr:nth-child(even) td { background-color: #f9f7fc; }
+tr:nth-child(odd) td { background-color: #ffffff; }
 </style></head><body>
 <div class='container'>
 <h1>Daily Backup Report</h1>
 <div class='subtitle'>Report Date: ${REPORT_DATE}</div>
-
 <div class='summary-box'>
   <div class='summary-item'><span>${success_rate}%</span><label>Success Rate</label></div>
   <div class='summary-item'><span>${error_count}</span><label>Failures</label></div>
   <div class='summary-item'><span>${total_storage} GB</span><label>Total Storage</label></div>
 </div>
-
 <div class='chart-row'>
   <div class='chart-frame'><img src='${DONUT_CHART_URL}' style='max-width:100%;'></div>
   <div class='chart-frame'><img src='${BAR_CHART_URL}' style='max-width:100%;'></div>
 </div>
-
 <h2 style='text-align:center; color:#4B286D; margin-top:30px;'>Top 5 Largest Backups</h2>
 <table>
-<tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>"
+<tr><th>Server</th><th>Database Engine</th><th>Size</th></tr>
+EOF
 echo "${top_backups}" | tail -n +2 | while IFS=$'\t' read -r server engine size; do
   echo "<tr><td>${server}</td><td>${engine}</td><td>${size}</td></tr>"
 done
-echo "</table>
+cat <<EOF
+</table>
 <div class='footer'>Report generated automatically by <b>Database Engineering</b></div>
-</div></body></html>"
+</div></body></html>
+EOF
 } > "${emailFile}"
 
 # === SEND EMAIL ===
