@@ -146,33 +146,27 @@ BAR_CHART_JSON=$(cat <<EOF
   },
   "options": {
     "layout": {
-      "padding": { "top": 80, "bottom": 30 }
+      "padding": { "top": 140, "bottom": 30 }
     },
     "plugins": {
       "title": {
         "display": true,
-        "text": "Daily Backup Storage by DB Engine",
+        "text": "Total Storage (GB)",
         "color": "#4B286D",
-        "font": { "size": 18, "weight": "bold" },
-        "padding": { "bottom": 30 }
+        "font": { "size": 20, "weight": "bold" },
+        "padding": { "bottom": 20 }
       },
       "legend": {
-        "display": true,
-        "position": "bottom",
-        "labels": {
-          "color": "#4B286D",
-          "font": { "weight": "bold" },
-          "padding": 20
-        }
+        "display": false
       },
       "datalabels": {
         "anchor": "end",
         "align": "top",
-        "offset": 14,
+        "offset": 6,
         "clip": false,
-        "padding": { "top": 8 },
+        "padding": { "top": 6 },
         "color": "#4B286D",
-        "font": { "weight": "bold", "size": 12 },
+        "font": { "weight": "bold", "size": 13 },
         "formatter": "(value) => value + ' GB'"
       }
     },
@@ -200,6 +194,7 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
+
 
 # === CHART URL GENERATION ===
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
