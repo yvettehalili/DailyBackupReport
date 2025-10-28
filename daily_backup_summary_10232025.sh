@@ -91,28 +91,30 @@ LABELS_JSON=$(printf '%s\n' "${LABELS[@]}" | jq -Rsc 'split("\n")[:-1]')
 DATA_JSON=$(printf '%s\n' "${DATA[@]}" | jq -Rsc 'split("\n")[:-1] | map(tonumber)')
 COLORS_JSON=$(printf '%s\n' "${COLORS[@]}" | jq -Rsc 'split("\n")[:-1]')
 
-# === DONUT CHART ===
-DONUT_CHART_JSON=$(cat <<EOF
+# === DONUT CHART (Fixed visibility + plugin registration) ===
+DONUT_CHART_JSON=$(cat <<'EOF'
 {
   "type": "doughnut",
   "data": {
-    "labels": ["Success (${success_rate}%)", "Failure (${error_rate}%)"],
+    "labels": ["Success", "Failure"],
     "datasets": [{
-      "data": [${success_count}, ${error_count}],
+      "data": [__SUCCESS_COUNT__, __ERROR_COUNT__],
       "backgroundColor": ["#6A4C93", "#00A6A6"],
-      "hoverOffset": 10,
-      "borderWidth": 4,
+      "hoverOffset": 8,
+      "borderWidth": 3,
       "borderColor": "#ffffff"
     }]
   },
   "options": {
     "cutout": "65%",
+    "layout": { "padding": { "top": 20, "bottom": 20 } },
     "plugins": {
       "title": {
         "display": true,
         "text": "Backup Status Overview",
         "color": "#4B286D",
-        "font": { "size": 18, "weight": "bold" }
+        "font": { "size": 18, "weight": "bold" },
+        "padding": { "bottom": 15 }
       },
       "legend": {
         "position": "bottom",
@@ -124,8 +126,8 @@ DONUT_CHART_JSON=$(cat <<EOF
         "formatter": "(value, ctx) => {
           const dataArr = ctx.chart.data.datasets[0].data;
           const total = dataArr.reduce((a, b) => a + b, 0);
-          const percentage = ((value / total) * 100).toFixed(1) + '%';
-          return percentage;
+          const pct = ((value / total) * 100).toFixed(1) + '%';
+          return pct;
         }"
       }
     }
@@ -134,29 +136,33 @@ DONUT_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
+DONUT_CHART_JSON="${DONUT_CHART_JSON/__SUCCESS_COUNT__/${success_count}}"
+DONUT_CHART_JSON="${DONUT_CHART_JSON/__ERROR_COUNT__/${error_count}}"
 DONUT_CHART_URL=$(post_chart_json "${DONUT_CHART_JSON}" 350 350 white)
 
-# === BAR CHART ===
-BAR_CHART_JSON=$(cat <<EOF
+
+# === BAR CHART (Fixed label overlap + bottom legend) ===
+BAR_CHART_JSON=$(cat <<'EOF'
 {
   "type": "bar",
   "data": {
-    "labels": ${LABELS_JSON},
+    "labels": __LABELS_JSON__,
     "datasets": [{
       "label": "Total Storage (GB)",
-      "data": ${DATA_JSON},
-      "backgroundColor": ${COLORS_JSON},
+      "data": __DATA_JSON__,
+      "backgroundColor": __COLORS_JSON__,
       "borderRadius": 10
     }]
   },
   "options": {
-    "layout": { "padding": { "bottom": 30 } },
+    "layout": { "padding": { "top": 40, "bottom": 30 } },
     "plugins": {
       "title": {
         "display": true,
         "text": "Daily Backup Storage by DB Engine",
         "color": "#4B286D",
-        "font": { "size": 20, "weight": "bold" }
+        "font": { "size": 20, "weight": "bold" },
+        "padding": { "bottom": 25 }
       },
       "legend": {
         "display": true,
@@ -171,7 +177,7 @@ BAR_CHART_JSON=$(cat <<EOF
       "datalabels": {
         "anchor": "end",
         "align": "top",
-        "offset": 4,
+        "offset": 6,
         "color": "#4B286D",
         "font": { "weight": "bold", "size": 12 },
         "formatter": "(value) => value + ' GB'"
@@ -199,6 +205,9 @@ BAR_CHART_JSON=$(cat <<EOF
 }
 EOF
 )
+BAR_CHART_JSON="${BAR_CHART_JSON/__LABELS_JSON__/${LABELS_JSON}}"
+BAR_CHART_JSON="${BAR_CHART_JSON/__DATA_JSON__/${DATA_JSON}}"
+BAR_CHART_JSON="${BAR_CHART_JSON/__COLORS_JSON__/${COLORS_JSON}}"
 BAR_CHART_URL=$(post_chart_json "${BAR_CHART_JSON}" 600 350 white)
 
 # === TOP 5 AGGREGATED BACKUPS ===
